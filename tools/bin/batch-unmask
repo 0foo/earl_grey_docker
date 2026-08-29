@@ -4,6 +4,7 @@ set -euo pipefail
 if [ $# -lt 2 ]; then
 	echo "Usage: $(basename "$0") <input-dir> <output-dir>" >&2
 	echo "  Runs unmask-genome on every file in <input-dir>, writing same-named files into <output-dir>." >&2
+	echo "  A failure on one file is logged and skipped — it does not stop the batch." >&2
 	echo "Example: $(basename "$0") /data/bioinfo/data/genomes/1_masked_datasets/genomes_dhakad /data/bioinfo/data/genomes/2_unmasked_datasets" >&2
 	exit 1
 fi
@@ -14,9 +15,24 @@ mkdir -p "$dst"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+ok=0
+failed=()
 for f in "$src"/*; do
 	[ -f "$f" ] || continue
 	name="$(basename "$f")"
 	echo "Unmasking $name..."
-	"$script_dir/unmask-genome" "$f" "$dst/$name"
+	if "$script_dir/unmask-genome" "$f" "$dst/$name"; then
+		ok=$((ok + 1))
+	else
+		echo "FAILED: $name" >&2
+		failed+=("$name")
+	fi
 done
+
+echo
+echo "Done: $ok succeeded, ${#failed[@]} failed."
+if [ "${#failed[@]}" -gt 0 ]; then
+	printf 'Failed files:\n'
+	printf '  %s\n' "${failed[@]}"
+	exit 1
+fi

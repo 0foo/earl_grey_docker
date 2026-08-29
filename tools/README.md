@@ -56,7 +56,7 @@ Prefer these over calling `docker compose run` directly — they take real host 
   ```
   tools/bin/report-mask genome.fna
   ```
-* `bin/batch-unmask <input-dir> <output-dir>` — runs `unmask-genome` on every file in `<input-dir>`, writing same-named files into `<output-dir>` (created if missing).
+* `bin/batch-unmask <input-dir> <output-dir>` — runs `unmask-genome` on every file in `<input-dir>`, writing same-named files into `<output-dir>` (created if missing). A failure on one file is logged and skipped, not fatal to the batch; prints a success/failure summary at the end and exits `1` if anything failed. A failed conversion can leave a 0-byte stub at the output path — worth checking for (`find <output-dir> -type f -empty`) and removing before re-running.
   ```
   tools/bin/batch-unmask /data/bioinfo/data/genomes/1_masked_datasets/genomes_dhakad /data/bioinfo/data/genomes/2_unmasked_datasets
   ```
