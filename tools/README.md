@@ -12,7 +12,7 @@
 * `bin/batch-unmask` — runs `unmask-genome` over every file in a directory.
 * `bin/check-fasta` — validates that a file is well-formed FASTA/FASTQ (built on `run-bio`).
 * `bin/batch-check-fasta` — runs `check-fasta` over every file in a directory.
-* `bin/batch-verify-ncbi` — for every file in a directory whose name contains an NCBI accession, fetches that assembly and compares sequences.
+* `bin/batch-verify-ncbi` — for every file in a directory whose name contains an NCBI accession, fetches that assembly and compares sequences, logging results.
 
 ## Prerequisites
 
@@ -71,7 +71,10 @@ Prefer these over calling `docker compose run` directly — they take real host 
   ```
   tools/bin/batch-check-fasta /data/bioinfo/data/genomes/1_masked_datasets/genomes_dhakad
   ```
-* `bin/batch-verify-ncbi <dir>` — for every file in `<dir>` whose name contains an NCBI assembly accession (`GCF_`/`GCA_#########.#`), fetches that assembly from NCBI, unmasks both the fetched copy and the local file, and runs `compare-fasta` between them — so it verifies "same genome regardless of masking," not byte-identity. Files without a recognizable accession in the name (e.g. `*.nanopore.*`) are skipped. A fetch failure or a real sequence difference is logged per-file and does not stop the batch; downloaded copies are discarded after each comparison. Prints a summary (verified/differed/fetch-failed/skipped) and exits `1` if anything differed or failed to fetch.
+* `bin/batch-verify-ncbi <dir> [log-file]` — for every file in `<dir>` whose name contains an NCBI assembly accession (`GCF_`/`GCA_#########.#`), fetches that assembly from NCBI, unmasks both the fetched copy and the local file, and runs `compare-fasta` between them — so it verifies "same genome regardless of masking," not byte-identity. Files without a recognizable accession in the name (e.g. `*.nanopore.*`) are skipped. A fetch failure or a real sequence difference is logged per-file and does not stop the batch; downloaded copies are discarded after each comparison. Writes one tab-separated line per processed file to `[log-file]` (default `./ncbi-verify.log`): `<name>  <accession>  MATCH|DIFFER|FETCH_FAILED`. Prints a console summary too, and exits `1` if anything differed or failed to fetch.
   ```
   tools/bin/batch-verify-ncbi /data/bioinfo/data/genomes/2_unmasked_datasets
+  # -> logs to ./ncbi-verify.log
+
+  tools/bin/batch-verify-ncbi /data/bioinfo/data/genomes/2_unmasked_datasets /data/bioinfo/data/genomes/ncbi-verify.log
   ```
