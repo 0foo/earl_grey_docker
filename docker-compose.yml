@@ -1,0 +1,22 @@
+services:
+  earlgrey:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: earlgrey-insects:7.3.1
+    volumes:
+      - ../data/dfam_data:/opt/conda/envs/earlgrey/share/famdb-3.0.0/Libraries/famdb
+      - ../data/genomes:/data
+    stdin_open: true
+    tty: true
+
+# Build:
+#   docker compose build
+#
+# Run earlGrey locally (paths are relative to /data inside the container,
+# which maps to ../data/genomes on the host):
+#   docker compose run --rm earlgrey -g <genome.fasta> -s <species> -o <output_dir> -t <threads>
+#
+# -g/-o also accept s3:// URIs (for parity with AWS Batch) even when run
+# locally via compose, as long as AWS credentials are available in the
+# container (e.g. mount ~/.aws or export AWS_* env vars).
