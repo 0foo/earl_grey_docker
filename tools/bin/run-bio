@@ -28,4 +28,4 @@ for a in "$@"; do
 	fi
 done
 
-docker compose run --rm "${mounts[@]}" tools "$@"
+docker compose --progress quiet run --rm "${mounts[@]}" tools "$@"

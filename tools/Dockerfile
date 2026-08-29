@@ -18,7 +18,9 @@ RUN mamba create -n bioinfo -y -c conda-forge -c bioconda \
 RUN mamba install -n base -y -c conda-forge awscli && \
     mamba clean -a -y
 
-ENTRYPOINT ["conda", "run", "--no-capture-output", "-n", "bioinfo"]
+COPY entrypoint.sh /opt/tools/entrypoint.sh
+RUN chmod +x /opt/tools/entrypoint.sh
+ENTRYPOINT ["/opt/tools/entrypoint.sh"]
 CMD ["bash"]
 
 # Build (run from this directory, docker/tools/):
