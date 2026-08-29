@@ -8,6 +8,7 @@
 * `bin/unmask-genome` — unmasks a genome FASTA with `seqkit seq -u` (built on `run-bio`).
 * `bin/fetch-genome` — downloads a genome from NCBI by accession via `datasets` (built on `run-bio`).
 * `bin/compare-fasta` — checks whether two FASTA files have the same sequences with `seqkit` (built on `run-bio`).
+* `bin/report-mask` — reports hard-mask (`N`) and soft-mask (lowercase) extent in a genome FASTA (built on `run-bio`).
 
 ## Prerequisites
 
@@ -49,4 +50,8 @@ Prefer these over calling `docker compose run` directly — they take real host 
 * `bin/compare-fasta <file1.fna> <file2.fna>` — checks whether two FASTAs have the same sequences, ignoring headers, line-wrap, and record order. Prints a hash per file and `MATCH`/`DIFFER`; exits `0` on match, `1` on differ (scriptable).
   ```
   tools/bin/compare-fasta genome_a.fna genome_b.fna
+  ```
+* `bin/report-mask <genome.fna>` — reports hard-mask (`N`) and soft-mask (lowercase) extent: total length, `N` base count/percentage/run count, and lowercase base count/percentage. Hard-masked `N`s are unrecoverable (the original base was deleted when masked) — this only tells you how much of the genome is affected, it doesn't undo it. Soft-masking *is* recoverable — see `unmask-genome`.
+  ```
+  tools/bin/report-mask genome.fna
   ```

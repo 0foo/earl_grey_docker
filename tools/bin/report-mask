@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -lt 1 ]; then
+	echo "Usage: $(basename "$0") <genome.fna>" >&2
+	echo "  Reports hard-masking (N) and soft-masking (lowercase) extent." >&2
+	echo "  Hard-masked (N) bases are unrecoverable — this only reports how much of the genome is affected." >&2
+	echo "Example: $(basename "$0") genome.fna" >&2
+	exit 1
+fi
+
+file="$(realpath -m "$1")"
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Unwraps to one line per record (-s -w 0, headers stripped), then counts
+# total length, N/n bases (hard-mask, unrecoverable), lowercase bases
+# (soft-mask, reversible via unmask-genome), and N runs (contiguous
+# hard-masked stretches). Percentages use integer bash arithmetic (x100) to
+# avoid depending on awk/bc/python being present in the image.
+"$script_dir/run-bio" bash -c '
+set -euo pipefail
+file="$1"
+tmp="$(mktemp)"
+trap "rm -f \"$tmp\"" EXIT
+seqkit seq -s -w 0 "$file" > "$tmp"
+
+records=$(wc -l < "$tmp")
+total_len=$(( $(wc -c < "$tmp") - records ))
+n_count=$(tr -cd "Nn" < "$tmp" | wc -c)
+lower_count=$(tr -cd "a-z" < "$tmp" | wc -c)
+n_runs=$(grep -oE "[Nn]+" "$tmp" | wc -l)
+
+pct() {
+	local part="$1" whole="$2"
+	if [ "$whole" -eq 0 ]; then echo "0.00"; return; fi
+	local scaled=$(( part * 10000 / whole ))
+	printf "%d.%02d" "$(( scaled / 100 ))" "$(( scaled % 100 ))"
+}
+
+echo "$file"
+echo "  records:      $records"
+echo "  length:       $total_len bp"
+echo "  hard-masked:  $n_count bp ($(pct "$n_count" "$total_len")%) across $n_runs run(s) — N bases, unrecoverable"
+echo "  soft-masked:  $lower_count bp ($(pct "$lower_count" "$total_len")%) — lowercase, recoverable with unmask-genome"
+' _ "$file"
