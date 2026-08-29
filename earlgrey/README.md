@@ -33,16 +33,13 @@ docker compose run --rm earlgrey -g /genomes/raw_data/<genome>.fna -s <species> 
 
 `-g` is container-side, under `/genomes` (mapped to `$GENOMES_DIR`); `-o` is under `/output` (mapped to `$OUTPUT_DIR`) — a separate mount, so output doesn't land inside the genomes directory.
 
-`DFAM_DATA_DIR`, `GENOMES_DIR`, and `OUTPUT_DIR` are required — compose refuses to run without them, no repo-relative fallback. Set them inline, in an `earlgrey/.env` file, or in the shared `docker/.env` (see [../README.md](../README.md)) referenced with `--env-file`:
+`DFAM_DATA_DIR`, `GENOMES_DIR`, and `OUTPUT_DIR` are required — compose refuses to run without them, no repo-relative fallback. Set them inline or in an `earlgrey/.env` file (compose auto-loads it from this directory):
 
 ```
 DFAM_DATA_DIR=/data/bioinfo/data/dfam_data \
 GENOMES_DIR=/data/bioinfo/data/genomes \
 OUTPUT_DIR=/data/bioinfo/data/output \
   docker compose run --rm earlgrey -g /genomes/raw_data/<genome>.fna -s <species> -o /output -t <threads>
-
-# or, with a shared docker/.env:
-docker compose --env-file ../.env run --rm earlgrey -g /genomes/raw_data/<genome>.fna -s <species> -o /output -t <threads>
 ```
 
 **Note:** the container runs as root, so output is owned by `root`. Clean it up with a throwaway container instead of `sudo rm`:

@@ -8,5 +8,6 @@ if [ $# -eq 0 ]; then
 fi
 
 # Resolve relative to this script so it works regardless of the caller's cwd.
+# cwd becomes docker/tools/, so compose auto-loads docker/tools/.env.
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
-docker compose --env-file ../.env run --rm tools "$@"
+docker compose run --rm tools "$@"

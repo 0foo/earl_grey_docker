@@ -4,14 +4,14 @@
 
 * `Dockerfile` — builds `bioinfo-tools:latest`.
 * `docker-compose.yml` — builds the image and mounts `GENOMES_DIR`/`OUTPUT_DIR` (no `DFAM_DATA_DIR` needed here).
-* `bin/run.sh` — runs any command in the container.
-* `bin/unmask.sh` — unmasks a genome FASTA with `seqkit seq -u` (built on `run.sh`).
-* `bin/fetch_genome.sh` — downloads a genome from NCBI by accession via `datasets` (built on `run.sh`).
+* `bin/run-bio` — runs any command in the container.
+* `bin/unmask-genome` — unmasks a genome FASTA with `seqkit seq -u` (built on `run-bio`).
+* `bin/fetch-genome` — downloads a genome from NCBI by accession via `datasets` (built on `run-bio`).
 
 ## Prerequisites
 
 * Docker with Compose.
-* `GENOMES_DIR` and `OUTPUT_DIR` set — inline, in a `tools/.env` file, or in the shared `docker/.env` (see [../README.md](../README.md)) referenced with `--env-file`.
+* `GENOMES_DIR` and `OUTPUT_DIR` set — inline, or in a `tools/.env` file (compose auto-loads it from the project directory).
 
 ## Build & run
 
@@ -26,27 +26,21 @@ Or drop into a shell with every tool on PATH:
 docker compose run --rm tools bash
 ```
 
-With a shared `docker/.env` instead of a local one:
-
-```
-docker compose --env-file ../.env run --rm tools bash
-```
-
 ## `bin/` shortcuts
 
-Skip the `docker compose --env-file ...` boilerplate with these (both assume `docker/.env` holds `GENOMES_DIR`/`OUTPUT_DIR`, and work from any cwd):
+These wrap the `docker compose run` calls above and read `tools/.env` for `GENOMES_DIR`/`OUTPUT_DIR` (they `cd` into `tools/` first, so they work from any cwd):
 
-* `bin/run.sh <command> [args...]` — runs any command in the container.
+* `bin/run-bio <command> [args...]` — runs any command in the container.
   ```
-  tools/bin/run.sh bedtools intersect -a /genomes/a.bed -b /genomes/b.bed
+  tools/bin/run-bio bedtools intersect -a /genomes/a.bed -b /genomes/b.bed
   ```
-* `bin/unmask.sh <input> [output]` — unmasks a genome FASTA with `seqkit seq -u`. Paths are relative to `$GENOMES_DIR`; output defaults to `<input>.unmasked.<ext>`.
+* `bin/unmask-genome <input> [output]` — unmasks a genome FASTA with `seqkit seq -u`. Paths are relative to `$GENOMES_DIR`; output defaults to `<input>.unmasked.<ext>`.
   ```
-  tools/bin/unmask.sh raw_data/genome.fna
+  tools/bin/unmask-genome raw_data/genome.fna
   # -> writes $GENOMES_DIR/raw_data/genome.unmasked.fna
   ```
-* `bin/fetch_genome.sh <accession> [output]` — downloads a genome FASTA from NCBI. Output is relative to `$GENOMES_DIR`, defaults to `raw_data/<accession>.fna`.
+* `bin/fetch-genome <accession> [output]` — downloads a genome FASTA from NCBI. Output is relative to `$GENOMES_DIR`, defaults to `raw_data/<accession>.fna`.
   ```
-  tools/bin/fetch_genome.sh GCF_016746365.2
+  tools/bin/fetch-genome GCF_016746365.2
   # -> writes $GENOMES_DIR/raw_data/GCF_016746365.2.fna
   ```

@@ -11,6 +11,6 @@ input="$1"
 output="${2:-${input%.*}.unmasked.${input##*.}}"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-"$script_dir/run.sh" seqkit seq -u "/genomes/$input" -o "/genomes/$output"
+"$script_dir/run-bio" seqkit seq -u "/genomes/$input" -o "/genomes/$output"
 
 echo "Wrote \$GENOMES_DIR/$output"

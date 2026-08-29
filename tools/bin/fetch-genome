@@ -16,7 +16,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # datasets, unzip it, and pull the .fna out to $output. $1/$2 (not expanded
 # host-side) are the accession/output, passed in below as real argv so
 # nothing needs escaping into the script text.
-"$script_dir/run.sh" bash -c '
+"$script_dir/run-bio" bash -c '
 set -euo pipefail
 accession="$1"
 output="$2"
