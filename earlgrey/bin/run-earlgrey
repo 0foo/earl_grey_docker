@@ -16,6 +16,19 @@ threads="${5:-4}"
 
 mkdir -p "$output"
 
+# earlGrey doesn't unzip local inputs itself (only s3:// inputs auto-unzip,
+# via the entrypoint) — decompress a .gz genome to a temp file first so it
+# can be passed like any other local path. Placed inside $output (already
+# mounted below) rather than /tmp, so this doesn't require its own mount.
+cleanup_genome=""
+if [[ "$genome" == *.gz ]]; then
+	decompressed="$(mktemp -p "$output" --suffix=.fna)"
+	cleanup_genome="$decompressed"
+	trap '[ -n "$cleanup_genome" ] && rm -f "$cleanup_genome"' EXIT
+	gunzip -c "$genome" > "$decompressed"
+	genome="$decompressed"
+fi
+
 # The genome is mounted by its containing directory (not the file itself)
 # at the identical host path, so -g can reference it unchanged; same for
 # the output dir. Only the Dfam famdb mount has a fixed container target —
@@ -25,8 +38,8 @@ genome_dir="$(dirname "$genome")"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$script_dir/.."
 
-docker compose --progress quiet run --rm \
-	-v "$dfam:/opt/conda/envs/earlgrey/share/famdb-3.0.0/Libraries/famdb" \
-	-v "$genome_dir:$genome_dir" \
-	-v "$output:$output" \
+mounts=(-v "$dfam:/opt/conda/envs/earlgrey/share/famdb-3.0.0/Libraries/famdb" -v "$output:$output")
+[ "$genome_dir" = "$output" ] || mounts+=(-v "$genome_dir:$genome_dir")
+
+docker compose --progress quiet run --rm "${mounts[@]}" \
 	earlgrey -g "$genome" -s "$species" -o "$output" -t "$threads"

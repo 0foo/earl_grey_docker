@@ -9,7 +9,7 @@
 
 * Docker with Compose.
 * A local Dfam famdb directory, a genome FASTA, and an output directory (any paths — passed per run, not pre-configured).
-* The genome must be uncompressed for local runs — `earlGrey` won't unzip `.gz` itself (the `s3://` path in the entrypoint *does* auto-`gunzip` after download — see below).
+* The genome can be `.gz` or already uncompressed — `bin/run-earlgrey` auto-`gunzip`s a `.gz` input before handing it to `earlGrey` (which doesn't unzip local paths itself; only the `s3://` path in the entrypoint auto-`gunzip`s — see below). Calling `docker compose run` directly without the script, the input must already be uncompressed.
 
 ## Build
 
@@ -23,10 +23,10 @@ docker compose build
 bin/run-earlgrey <genome-file> <dfam-dir> <output-dir> <species> [threads]
 ```
 
-All four/five arguments are real paths/values on your local filesystem — nothing needs to live at a fixed location, and there's no `.env` file. `run-earlgrey` mounts the genome's directory, the output directory, and the Dfam dir (at the fixed internal path earlGrey's conda env expects it) for just that run.
+All four/five arguments are real paths/values on your local filesystem — nothing needs to live at a fixed location, and there's no `.env` file. `run-earlgrey` mounts the genome's directory, the output directory, and the Dfam dir (at the fixed internal path earlGrey's conda env expects it) for just that run. A `.gz` genome is auto-decompressed into a temp file inside `<output-dir>`, cleaned up once the run finishes.
 
 ```
-bin/run-earlgrey /data/bioinfo/data/genomes/2_unmasked_datasets/genome.fna /data/bioinfo/data/dfam_data /data/bioinfo/data/output dmel 8
+bin/run-earlgrey /data/bioinfo/data/genomes/2_unmasked_datasets/genome.fna.gz /data/bioinfo/data/dfam_data /data/bioinfo/data/output dmel 8
 ```
 
 `threads` defaults to `4` if omitted.
