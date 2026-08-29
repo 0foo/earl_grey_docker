@@ -2,22 +2,14 @@
 
 * `Dockerfile` — builds `earlgrey-insects:7.3.1` (Earl Grey 7.3.1 + Python 3.11 + awscli).
 * `entrypoint.sh` — wraps `earlGrey` so `-g`/`-o` accept local paths or `s3://` URIs, for local + AWS Batch use.
-* `docker-compose.yml` — builds the image and mounts `DFAM_DATA_DIR`/`GENOMES_DIR`/`OUTPUT_DIR` from the host.
-
-Expected layout:
-
-```
-$GENOMES_DIR/
-  raw_data/    # input genomes land here
-
-$OUTPUT_DIR/   # earlGrey output — separate from $GENOMES_DIR
-```
+* `docker-compose.yml` — builds the image. No fixed data mount — mounts are added per invocation (see below).
+* `bin/run-earlgrey` — runs earlGrey from plain host paths (genome file, Dfam dir, output dir), no config needed.
 
 ## Prerequisites
 
 * Docker with Compose.
-* A `DFAM_DATA_DIR` populated with the Dfam famdb files, a `GENOMES_DIR`, and an `OUTPUT_DIR` (see [Run locally](#run-locally)).
-* An uncompressed genome FASTA under `$GENOMES_DIR/raw_data/` (local runs only — `earlGrey` won't unzip `.gz` itself; `s3://` inputs auto-unzip, see below).
+* A local Dfam famdb directory, a genome FASTA, and an output directory (any paths — passed per run, not pre-configured).
+* The genome must be uncompressed for local runs — `earlGrey` won't unzip `.gz` itself (the `s3://` path in the entrypoint *does* auto-`gunzip` after download — see below).
 
 ## Build
 
@@ -28,24 +20,31 @@ docker compose build
 ## Run locally
 
 ```
-docker compose run --rm earlgrey -g /genomes/raw_data/<genome>.fna -s <species> -o /output -t <threads>
+bin/run-earlgrey <genome-file> <dfam-dir> <output-dir> <species> [threads]
 ```
 
-`-g` is container-side, under `/genomes` (mapped to `$GENOMES_DIR`); `-o` is under `/output` (mapped to `$OUTPUT_DIR`) — a separate mount, so output doesn't land inside the genomes directory.
-
-`DFAM_DATA_DIR`, `GENOMES_DIR`, and `OUTPUT_DIR` are required — compose refuses to run without them, no repo-relative fallback. Set them inline or in an `earlgrey/.env` file (compose auto-loads it from this directory):
+All four/five arguments are real paths/values on your local filesystem — nothing needs to live at a fixed location, and there's no `.env` file. `run-earlgrey` mounts the genome's directory, the output directory, and the Dfam dir (at the fixed internal path earlGrey's conda env expects it) for just that run.
 
 ```
-DFAM_DATA_DIR=/data/bioinfo/data/dfam_data \
-GENOMES_DIR=/data/bioinfo/data/genomes \
-OUTPUT_DIR=/data/bioinfo/data/output \
-  docker compose run --rm earlgrey -g /genomes/raw_data/<genome>.fna -s <species> -o /output -t <threads>
+bin/run-earlgrey /data/bioinfo/data/genomes/2_unmasked_datasets/genome.fna /data/bioinfo/data/dfam_data /data/bioinfo/data/output dmel 8
+```
+
+`threads` defaults to `4` if omitted.
+
+Without the script, the equivalent manual command:
+
+```
+docker compose run --rm \
+  -v /data/bioinfo/data/dfam_data:/opt/conda/envs/earlgrey/share/famdb-3.0.0/Libraries/famdb \
+  -v /data/bioinfo/data/genomes:/data/bioinfo/data/genomes \
+  -v /data/bioinfo/data/output:/data/bioinfo/data/output \
+  earlgrey -g /data/bioinfo/data/genomes/raw_data/<genome>.fna -s <species> -o /data/bioinfo/data/output -t <threads>
 ```
 
 **Note:** the container runs as root, so output is owned by `root`. Clean it up with a throwaway container instead of `sudo rm`:
 
 ```
-docker run --rm -v /path/to/repo/data/output:/output busybox rm -rf /output
+docker run --rm -v /data/bioinfo/data/output:/data/bioinfo/data/output busybox rm -rf /data/bioinfo/data/output
 ```
 
 ## Run on AWS Batch

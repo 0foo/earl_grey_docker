@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -lt 4 ]; then
+	echo "Usage: $(basename "$0") <genome-file> <dfam-dir> <output-dir> <species> [threads]" >&2
+	echo "  All paths are on your local filesystem (host paths)." >&2
+	echo "Example: $(basename "$0") /data/bioinfo/data/genomes/2_unmasked_datasets/genome.fna /data/bioinfo/data/dfam_data /data/bioinfo/data/output dmel 8" >&2
+	exit 1
+fi
+
+genome="$(realpath -m "$1")"
+dfam="$(realpath -m "$2")"
+output="$(realpath -m "$3")"
+species="$4"
+threads="${5:-4}"
+
+mkdir -p "$output"
+
+# The genome is mounted by its containing directory (not the file itself)
+# at the identical host path, so -g can reference it unchanged; same for
+# the output dir. Only the Dfam famdb mount has a fixed container target —
+# that path is baked into the conda env earlGrey expects it at.
+genome_dir="$(dirname "$genome")"
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$script_dir/.."
+
+docker compose --progress quiet run --rm \
+	-v "$dfam:/opt/conda/envs/earlgrey/share/famdb-3.0.0/Libraries/famdb" \
+	-v "$genome_dir:$genome_dir" \
+	-v "$output:$output" \
+	earlgrey -g "$genome" -s "$species" -o "$output" -t "$threads"

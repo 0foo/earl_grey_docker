@@ -3,25 +3,24 @@ services:
     build:
       context: .
     image: earlgrey-insects:7.3.1
-    volumes:
-      - ${DFAM_DATA_DIR}:/opt/conda/envs/earlgrey/share/famdb-3.0.0/Libraries/famdb
-      - ${GENOMES_DIR}:/genomes
-      - ${OUTPUT_DIR}:/output
     stdin_open: true
     tty: true
 
 # Build:
 #   docker compose build
 #
-# DFAM_DATA_DIR, GENOMES_DIR, and OUTPUT_DIR must be set (no defaults) —
-# either inline or via a .env file next to this compose file:
-#   DFAM_DATA_DIR=/data/bioinfo/data/dfam_data \
-#   GENOMES_DIR=/data/bioinfo/data/genomes \
-#   OUTPUT_DIR=/data/bioinfo/data/output \
-#     docker compose run --rm earlgrey -g <genome.fasta> -s <species> -o <output_dir> -t <threads>
+# No fixed volumes — mount whatever host paths you're working with for this
+# run. Prefer bin/run-earlgrey (see README.md), which does this for you from
+# plain host paths:
+#   bin/run-earlgrey <genome-file> <dfam-dir> <output-dir> <species> [threads]
 #
-# -g (path relative to /genomes inside the container, which maps to
-# $GENOMES_DIR on the host) and -o (relative to /output, which maps to
-# $OUTPUT_DIR) also accept s3:// URIs (for parity with AWS Batch) even when
-# run locally via compose, as long as AWS credentials are available in the
-# container (e.g. mount ~/.aws or export AWS_* env vars).
+# Manually:
+#   docker compose run --rm \
+#     -v /data/bioinfo/data/dfam_data:/opt/conda/envs/earlgrey/share/famdb-3.0.0/Libraries/famdb \
+#     -v /data/bioinfo/data/genomes:/data/bioinfo/data/genomes \
+#     -v /data/bioinfo/data/output:/data/bioinfo/data/output \
+#     earlgrey -g /data/bioinfo/data/genomes/raw_data/<genome>.fna -s <species> \
+#       -o /data/bioinfo/data/output -t <threads>
+#
+# -g/-o also accept s3:// URIs (for parity with AWS Batch) as long as AWS
+# credentials are available in the container (mount ~/.aws or export AWS_*).
