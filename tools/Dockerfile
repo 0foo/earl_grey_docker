@@ -23,8 +23,8 @@ WORKDIR /genomes
 ENTRYPOINT ["conda", "run", "--no-capture-output", "-n", "bioinfo"]
 CMD ["bash"]
 
-# Build:
-#   docker build -f docker/tools/Dockerfile -t bioinfo-tools:latest .
+# Build (run from this directory, docker/tools/):
+#   docker build -t bioinfo-tools:latest .
 #
 # Run a single command (e.g. unmask a genome):
 #   docker run --rm -v /path/to/genomes:/genomes bioinfo-tools:latest \

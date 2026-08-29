@@ -1,8 +1,7 @@
 services:
   earlgrey:
     build:
-      context: ../..
-      dockerfile: docker/earlgrey/Dockerfile
+      context: .
     image: earlgrey-insects:7.3.1
     volumes:
       - ${DFAM_DATA_DIR}:/opt/conda/envs/earlgrey/share/famdb-3.0.0/Libraries/famdb

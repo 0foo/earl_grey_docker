@@ -1,8 +1,7 @@
 services:
   tools:
     build:
-      context: ../..
-      dockerfile: docker/tools/Dockerfile
+      context: .
     image: bioinfo-tools:latest
     volumes:
       - ${GENOMES_DIR}:/genomes
