@@ -7,6 +7,7 @@
 * `bin/run-bio` — runs any command in the container.
 * `bin/unmask-genome` — unmasks a genome FASTA with `seqkit seq -u` (built on `run-bio`).
 * `bin/fetch-genome` — downloads a genome from NCBI by accession via `datasets` (built on `run-bio`).
+* `bin/compare-fasta` — checks whether two FASTA files have the same sequences with `seqkit` (built on `run-bio`).
 
 ## Prerequisites
 
@@ -44,4 +45,8 @@ Prefer these over calling `docker compose run` directly — they take real host 
 * `bin/fetch-genome <accession> [output.fna]` — downloads a genome FASTA from NCBI. Output defaults to `./<accession>.fna` in your current directory.
   ```
   tools/bin/fetch-genome GCF_016746365.2 /data/bioinfo/data/genomes/raw_data/GCF_016746365.2.fna
+  ```
+* `bin/compare-fasta <file1.fna> <file2.fna>` — checks whether two FASTAs have the same sequences, ignoring headers, line-wrap, and record order. Prints a hash per file and `MATCH`/`DIFFER`; exits `0` on match, `1` on differ (scriptable).
+  ```
+  tools/bin/compare-fasta genome_a.fna genome_b.fna
   ```

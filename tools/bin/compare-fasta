@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -lt 2 ]; then
+	echo "Usage: $(basename "$0") <file1.fna> <file2.fna>" >&2
+	echo "  Compares sequence content only — ignores headers, line-wrap, and record order." >&2
+	echo "Example: $(basename "$0") genome_a.fna genome_b.fna" >&2
+	exit 1
+fi
+
+file1="$(realpath -m "$1")"
+file2="$(realpath -m "$2")"
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Strips headers and unwraps to one line per record (-s -w 0), sorts so
+# record order doesn't matter, then hashes. Exits 0 on match, 1 on differ,
+# so this is usable in scripts/CI. $1/$2 are the two paths, passed as real
+# argv so nothing needs escaping into the script text.
+"$script_dir/run-bio" bash -c '
+set -euo pipefail
+f1="$1"
+f2="$2"
+h1="$(seqkit seq -s -w 0 "$f1" | sort | md5sum | cut -d" " -f1)"
+h2="$(seqkit seq -s -w 0 "$f2" | sort | md5sum | cut -d" " -f1)"
+echo "$f1  $h1"
+echo "$f2  $h2"
+if [ "$h1" = "$h2" ]; then
+	echo "MATCH: sequences are identical (order-independent)"
+else
+	echo "DIFFER: sequences differ"
+	exit 1
+fi
+' _ "$file1" "$file2"
