@@ -33,7 +33,7 @@ ENTRYPOINT ["/opt/earlgrey/entrypoint.sh"]
 
 # Build the Docker image with the following command (run from the repo root,
 # i.e. the parent of docker/ and data/):
-# docker build -f docker/Dockerfile -t earlgrey-insects:7.3.1 .
+# docker build -f docker/earlgrey.Dockerfile -t earlgrey-insects:7.3.1 .
 #
 # Run locally with dfam_data bind-mounted and a local genome file (path is
 # absolute, so this works from anywhere; adjust the host-side path if your

@@ -2,10 +2,21 @@ services:
   earlgrey:
     build:
       context: ..
-      dockerfile: docker/Dockerfile
+      dockerfile: docker/earlgrey.Dockerfile
     image: earlgrey-insects:7.3.1
     volumes:
       - ${DFAM_DATA_DIR}:/opt/conda/envs/earlgrey/share/famdb-3.0.0/Libraries/famdb
+      - ${GENOMES_DIR}:/genomes
+      - ${OUTPUT_DIR}:/output
+    stdin_open: true
+    tty: true
+
+  tools:
+    build:
+      context: ..
+      dockerfile: docker/tools.Dockerfile
+    image: bioinfo-tools:latest
+    volumes:
       - ${GENOMES_DIR}:/genomes
       - ${OUTPUT_DIR}:/output
     stdin_open: true

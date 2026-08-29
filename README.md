@@ -5,9 +5,10 @@
 
 ## What's here
 
-* `Dockerfile` — builds `earlgrey-insects:7.3.1` (Earl Grey 7.3.1 + Python 3.11 + awscli).
+* `earlgrey.Dockerfile` — builds `earlgrey-insects:7.3.1` (Earl Grey 7.3.1 + Python 3.11 + awscli).
 * `entrypoint.sh` — wraps `earlGrey` so `-g`/`-o` accept local paths or `s3://` URIs, for local + AWS Batch use.
-* `docker-compose.yml` — local dev: builds the image and mounts `DFAM_DATA_DIR`/`GENOMES_DIR`/`OUTPUT_DIR` from the host.
+* `tools.Dockerfile` — builds `bioinfo-tools:latest`, a general genome toolbox: `seqkit`, `seqtk`, `bedtools`, `samtools`, `bcftools`, `gffread`, `ncbi-datasets-cli` (`datasets`/`dataformat`), `awscli`.
+* `docker-compose.yml` — local dev: builds both images and mounts `DFAM_DATA_DIR`/`GENOMES_DIR`/`OUTPUT_DIR` from the host (the `tools` service only needs `GENOMES_DIR`/`OUTPUT_DIR`).
 
 Expected layout:
 
@@ -51,6 +52,20 @@ OUTPUT_DIR=/data/bioinfo/data/output \
 
 ```
 docker run --rm -v /path/to/repo/data/output:/output busybox rm -rf /output
+```
+
+## Genome toolbox
+
+`bioinfo-tools` bundles `seqkit`, `seqtk`, `bedtools`, `samtools`, `bcftools`, `gffread`, and NCBI's `datasets`/`dataformat` CLI in one image, for one-off tasks (unmasking a genome, downloading from NCBI, interval math on annotations) that don't need the earlGrey pipeline.
+
+```
+docker compose run --rm tools seqkit seq -u /genomes/raw_data/<genome>.fna > /genomes/raw_data/<genome>.unmasked.fna
+```
+
+Or drop into a shell with every tool on PATH:
+
+```
+docker compose run --rm tools bash
 ```
 
 ## Run on AWS Batch
