@@ -3,11 +3,29 @@ set -euo pipefail
 
 if [ $# -eq 0 ]; then
 	echo "Usage: $(basename "$0") <command> [args...]" >&2
-	echo "Example: $(basename "$0") bedtools intersect -a /genomes/a.bed -b /genomes/b.bed" >&2
+	echo "Example: $(basename "$0") bedtools intersect -a /data/bioinfo/data/genomes/a.bed -b /data/bioinfo/data/genomes/b.bed" >&2
+	echo "Any absolute host path in the arguments is bind-mounted into the container at the same path." >&2
 	exit 1
 fi
 
 # Resolve relative to this script so it works regardless of the caller's cwd.
-# cwd becomes docker/tools/, so compose auto-loads docker/tools/.env.
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
-docker compose run --rm tools "$@"
+
+# Mount each unique absolute host path referenced in the arguments at the
+# identical path inside the container, so callers never translate paths —
+# what you pass is what the tool sees. Docker creates missing host dirs for
+# a bind mount automatically, so this works for not-yet-existing outputs too.
+mounts=()
+declare -A seen
+for a in "$@"; do
+	if [[ "$a" = /* ]]; then
+		dir="$a"
+		[ -d "$dir" ] || dir="$(dirname "$a")"
+		if [ -z "${seen[$dir]:-}" ]; then
+			seen["$dir"]=1
+			mounts+=(-v "$dir:$dir")
+		fi
+	fi
+done
+
+docker compose run --rm "${mounts[@]}" tools "$@"

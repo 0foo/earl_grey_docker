@@ -3,20 +3,16 @@ services:
     build:
       context: .
     image: bioinfo-tools:latest
-    volumes:
-      - ${GENOMES_DIR}:/genomes
-      - ${OUTPUT_DIR}:/output
     stdin_open: true
     tty: true
 
 # Build:
 #   docker compose build
 #
-# GENOMES_DIR and OUTPUT_DIR must be set (no defaults) — either inline or
-# via a .env file next to this compose file:
-#   GENOMES_DIR=/data/bioinfo/data/genomes \
-#   OUTPUT_DIR=/data/bioinfo/data/output \
-#     docker compose run --rm tools seqkit seq -u /genomes/raw_data/<genome>.fna
+# No fixed volumes — mount whatever host path(s) you're working with for
+# this run, at the same path inside the container, with -v/--volume:
+#   docker compose run --rm -v /data/bioinfo/data/genomes:/data/bioinfo/data/genomes \
+#     tools seqkit seq -u /data/bioinfo/data/genomes/raw_data/<genome>.fna
 #
-# Or drop into a shell with every tool on PATH:
-#   docker compose run --rm tools bash
+# The tools/bin/ scripts do this automatically from the paths you pass them
+# (see tools/README.md) — prefer those over calling compose directly.

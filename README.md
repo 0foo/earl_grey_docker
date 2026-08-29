@@ -8,17 +8,9 @@
 * [`earlgrey/`](earlgrey/README.md) — Earl Grey repeat-annotation pipeline image.
 * [`tools/`](tools/README.md) — general genome toolbox image (`seqkit`, `bedtools`, `samtools`, NCBI `datasets`, etc.) plus `tools/bin/` shortcut scripts.
 
-Both compose files read `DFAM_DATA_DIR`, `GENOMES_DIR`, `OUTPUT_DIR` (`tools` only needs the latter two). Each build is self-contained (`context: .`), and each expects its own `.env` file next to its `docker-compose.yml` — `docker/earlgrey/.env` and `docker/tools/.env` — since `docker compose` auto-loads `.env` from the directory it runs in (or is `cd`'d into, as `tools/bin/*.sh` do):
+Each build is self-contained (`context: .`).
 
-```
-docker/earlgrey/.env:
-  DFAM_DATA_DIR=/data/bioinfo/data/dfam_data
-  GENOMES_DIR=/data/bioinfo/data/genomes
-  OUTPUT_DIR=/data/bioinfo/data/output
-
-docker/tools/.env:
-  GENOMES_DIR=/data/bioinfo/data/genomes
-  OUTPUT_DIR=/data/bioinfo/data/output
-```
+* `earlgrey` needs fixed `DFAM_DATA_DIR`/`GENOMES_DIR`/`OUTPUT_DIR` mounts, read from a `docker/earlgrey/.env` file (compose auto-loads it from that directory) — the pipeline's own `-g`/`-o` flags only understand container paths.
+* `tools` has no fixed mounts or env vars at all — `tools/bin/` scripts take real host paths per invocation and mount only what's needed for that run.
 
 See each subfolder's README for build/run instructions.

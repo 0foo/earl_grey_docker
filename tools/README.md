@@ -3,7 +3,7 @@
 `bioinfo-tools` bundles `seqkit`, `seqtk`, `bedtools`, `samtools`, `bcftools`, `gffread`, and NCBI's `datasets`/`dataformat` CLI in one image, for one-off tasks (unmasking a genome, downloading from NCBI, interval math on annotations) that don't need the earlGrey pipeline.
 
 * `Dockerfile` — builds `bioinfo-tools:latest`.
-* `docker-compose.yml` — builds the image and mounts `GENOMES_DIR`/`OUTPUT_DIR` (no `DFAM_DATA_DIR` needed here).
+* `docker-compose.yml` — builds the image. No fixed data mount — mounts are added per invocation (see below).
 * `bin/run-bio` — runs any command in the container.
 * `bin/unmask-genome` — unmasks a genome FASTA with `seqkit seq -u` (built on `run-bio`).
 * `bin/fetch-genome` — downloads a genome from NCBI by accession via `datasets` (built on `run-bio`).
@@ -11,13 +11,15 @@
 ## Prerequisites
 
 * Docker with Compose.
-* `GENOMES_DIR` and `OUTPUT_DIR` set — inline, or in a `tools/.env` file (compose auto-loads it from the project directory).
+
+No environment variables or `.env` file needed — paths are passed per command.
 
 ## Build & run
 
 ```
 docker compose build
-docker compose run --rm tools seqkit seq -u /genomes/raw_data/<genome>.fna > /genomes/raw_data/<genome>.unmasked.fna
+docker compose run --rm -v /data/bioinfo/data/genomes:/data/bioinfo/data/genomes \
+  tools seqkit seq -u /data/bioinfo/data/genomes/raw_data/<genome>.fna
 ```
 
 Or drop into a shell with every tool on PATH:
@@ -28,19 +30,18 @@ docker compose run --rm tools bash
 
 ## `bin/` shortcuts
 
-These wrap the `docker compose run` calls above and read `tools/.env` for `GENOMES_DIR`/`OUTPUT_DIR` (they `cd` into `tools/` first, so they work from any cwd):
+Prefer these over calling `docker compose run` directly — they take real host paths (absolute, or relative to your cwd) and figure out the right `-v` mounts for you, so nothing needs to live at a fixed location:
 
-* `bin/run-bio <command> [args...]` — runs any command in the container.
+* `bin/run-bio <command> [args...]` — runs any command in the container. Every absolute host path found among the arguments is bind-mounted into the container at that exact same path (so tools see it unchanged).
   ```
-  tools/bin/run-bio bedtools intersect -a /genomes/a.bed -b /genomes/b.bed
+  tools/bin/run-bio bedtools intersect -a /data/bioinfo/data/genomes/a.bed -b /data/bioinfo/data/output/b.bed
   ```
-* `bin/unmask-genome <input> [output]` — unmasks a genome FASTA with `seqkit seq -u`. Paths are relative to `$GENOMES_DIR`; output defaults to `<input>.unmasked.<ext>`.
+* `bin/unmask-genome <input.fna> [output.fna]` — unmasks a genome FASTA with `seqkit seq -u`. Output defaults to `<input>.unmasked.<ext>` next to the input.
   ```
-  tools/bin/unmask-genome raw_data/genome.fna
-  # -> writes $GENOMES_DIR/raw_data/genome.unmasked.fna
+  tools/bin/unmask-genome /data/bioinfo/data/genomes/raw_data/genome.fna
+  # -> writes /data/bioinfo/data/genomes/raw_data/genome.unmasked.fna
   ```
-* `bin/fetch-genome <accession> [output]` — downloads a genome FASTA from NCBI. Output is relative to `$GENOMES_DIR`, defaults to `raw_data/<accession>.fna`.
+* `bin/fetch-genome <accession> [output.fna]` — downloads a genome FASTA from NCBI. Output defaults to `./<accession>.fna` in your current directory.
   ```
-  tools/bin/fetch-genome GCF_016746365.2
-  # -> writes $GENOMES_DIR/raw_data/GCF_016746365.2.fna
+  tools/bin/fetch-genome GCF_016746365.2 /data/bioinfo/data/genomes/raw_data/GCF_016746365.2.fna
   ```

@@ -18,20 +18,19 @@ RUN mamba create -n bioinfo -y -c conda-forge -c bioconda \
 RUN mamba install -n base -y -c conda-forge awscli && \
     mamba clean -a -y
 
-WORKDIR /genomes
-
 ENTRYPOINT ["conda", "run", "--no-capture-output", "-n", "bioinfo"]
 CMD ["bash"]
 
 # Build (run from this directory, docker/tools/):
 #   docker build -t bioinfo-tools:latest .
 #
-# Run a single command (e.g. unmask a genome):
-#   docker run --rm -v /path/to/genomes:/genomes bioinfo-tools:latest \
-#     seqkit seq -u /genomes/raw_data/genome.fna > genome.unmasked.fna
+# No fixed data mount — bind-mount whatever host path you're working with at
+# the same path inside the container, e.g. to unmask a genome:
+#   docker run --rm -v /data/bioinfo/data/genomes:/data/bioinfo/data/genomes bioinfo-tools:latest \
+#     seqkit seq -u /data/bioinfo/data/genomes/raw_data/genome.fna -o /data/bioinfo/data/genomes/raw_data/genome.unmasked.fna
 #
 # Drop into an interactive shell with every tool on PATH:
-#   docker run --rm -it -v /path/to/genomes:/genomes bioinfo-tools:latest bash
+#   docker run --rm -it -v /data/bioinfo/data/genomes:/data/bioinfo/data/genomes bioinfo-tools:latest bash
 #
-# Or via docker-compose.yml (reuses GENOMES_DIR/OUTPUT_DIR from .env):
-#   docker compose run --rm tools seqkit seq -u /genomes/raw_data/genome.fna
+# Prefer tools/bin/run-bio, unmask-genome, fetch-genome (see tools/README.md)
+# — they compute and pass the right -v mounts for you from plain host paths.
