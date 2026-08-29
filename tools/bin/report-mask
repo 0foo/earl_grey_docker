@@ -29,7 +29,9 @@ records=$(wc -l < "$tmp")
 total_len=$(( $(wc -c < "$tmp") - records ))
 n_count=$(tr -cd "Nn" < "$tmp" | wc -c)
 lower_count=$(tr -cd "a-z" < "$tmp" | wc -c)
-n_runs=$(grep -oE "[Nn]+" "$tmp" | wc -l)
+# grep exits 1 on zero matches (not an error) — with pipefail+set -e that
+# would otherwise kill this script silently on any genome with no N bases.
+n_runs=$(grep -oE "[Nn]+" "$tmp" | wc -l || true)
 
 pct() {
 	local part="$1" whole="$2"

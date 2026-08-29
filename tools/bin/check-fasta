@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -lt 1 ]; then
+	echo "Usage: $(basename "$0") <file.fna[.gz]>" >&2
+	echo "  Validates the file is well-formed FASTA/FASTQ (seqkit stats). Handles .gz transparently." >&2
+	echo "Example: $(basename "$0") genome.fna.gz" >&2
+	exit 1
+fi
+
+file="$(realpath -m "$1")"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# seqkit stats exits 0 even on a parse error (logs [ERRO] but keeps going),
+# so it can't be used to detect invalid input. seqkit seq does fail hard.
+if "$script_dir/run-bio" seqkit seq -s -w 0 "$file" > /dev/null; then
+	"$script_dir/run-bio" seqkit stats -a "$file"
+	echo "OK: $file"
+else
+	echo "INVALID: $file" >&2
+	exit 1
+fi
