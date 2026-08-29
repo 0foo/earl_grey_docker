@@ -20,7 +20,7 @@ RUN conda run --no-capture-output -n earlgrey earlGrey || true
 # instead of being baked in with COPY. Switch back to COPY once things work.
 
 # Set the default working directory for runtime operations
-WORKDIR /data
+WORKDIR /genomes
 
 # Wraps `conda run -n earlgrey earlGrey`, transparently handling s3:// URIs
 # for -g/-o (AWS Batch) alongside plain local paths (local testing) — see
@@ -40,8 +40,9 @@ ENTRYPOINT ["/opt/earlgrey/entrypoint.sh"]
 # repo lives elsewhere):
 # docker run --rm -it \
 #   -v /home/nick/Documents/projects/Projects-School/Atallah-Lab/data/dfam_data:/opt/conda/envs/earlgrey/share/famdb-3.0.0/Libraries/famdb \
-#   -v /home/nick/Documents/projects/Projects-School/Atallah-Lab/data/genomes:/data \
-#   earlgrey-insects:7.3.1 -g /data/raw_data/genome.fna -s dmel -o /data/output -t 8
+#   -v /home/nick/Documents/projects/Projects-School/Atallah-Lab/data/genomes:/genomes \
+#   -v /home/nick/Documents/projects/Projects-School/Atallah-Lab/data/output:/output \
+#   earlgrey-insects:7.3.1 -g /genomes/raw_data/genome.fna -s dmel -o /output -t 8
 #
 # On AWS Batch, same image/entrypoint, but -g/-o take s3:// URIs instead
 # (dfam_data still needs to reach the container — bake it in with COPY, or
