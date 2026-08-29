@@ -9,7 +9,8 @@ RUN mamba create -n bioinfo -y -c conda-forge -c bioconda \
     samtools \
     bcftools \
     gffread \
-    ncbi-datasets-cli && \
+    ncbi-datasets-cli \
+    unzip && \
     mamba clean -a -y
 
 # awscli in the base env (on PATH without activation), for parity with the

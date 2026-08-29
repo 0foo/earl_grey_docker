@@ -6,6 +6,7 @@
 * `docker-compose.yml` — builds the image and mounts `GENOMES_DIR`/`OUTPUT_DIR` (no `DFAM_DATA_DIR` needed here).
 * `bin/run.sh` — runs any command in the container.
 * `bin/unmask.sh` — unmasks a genome FASTA with `seqkit seq -u` (built on `run.sh`).
+* `bin/fetch_genome.sh` — downloads a genome from NCBI by accession via `datasets` (built on `run.sh`).
 
 ## Prerequisites
 
@@ -43,4 +44,9 @@ Skip the `docker compose --env-file ...` boilerplate with these (both assume `do
   ```
   tools/bin/unmask.sh raw_data/genome.fna
   # -> writes $GENOMES_DIR/raw_data/genome.unmasked.fna
+  ```
+* `bin/fetch_genome.sh <accession> [output]` — downloads a genome FASTA from NCBI. Output is relative to `$GENOMES_DIR`, defaults to `raw_data/<accession>.fna`.
+  ```
+  tools/bin/fetch_genome.sh GCF_016746365.2
+  # -> writes $GENOMES_DIR/raw_data/GCF_016746365.2.fna
   ```
