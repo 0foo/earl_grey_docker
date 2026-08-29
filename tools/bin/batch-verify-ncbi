@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -lt 1 ]; then
+	echo "Usage: $(basename "$0") <dir>" >&2
+	echo "  For every file in <dir> whose name contains an NCBI assembly accession" >&2
+	echo "  (GCF_/GCA_#########.#), fetches that assembly from NCBI, unmasks both" >&2
+	echo "  copies, and compares sequences. Files without an accession are skipped." >&2
+	echo "  A failure on one file (fetch or compare) is logged and does not stop the batch." >&2
+	echo "Example: $(basename "$0") /data/bioinfo/data/genomes/2_unmasked_datasets" >&2
+	exit 1
+fi
+
+dir="$(realpath -m "$1")"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+
+skipped=0
+matched=0
+verified=0
+differed=()
+fetch_failed=()
+
+for f in "$dir"/*; do
+	[ -f "$f" ] || continue
+	name="$(basename "$f")"
+
+	accession="$(grep -oE 'GC[AF]_[0-9]+\.[0-9]+' <<<"$name" || true)"
+	if [ -z "$accession" ]; then
+		skipped=$((skipped + 1))
+		continue
+	fi
+	matched=$((matched + 1))
+
+	echo "=== $name ($accession) ==="
+
+	ncbi_raw="$work/$accession.ncbi.fna"
+	ncbi_unmasked="$work/$accession.ncbi.unmasked.fna"
+	local_unmasked="$work/$name.local.unmasked.fna"
+
+	if ! "$script_dir/fetch-genome" "$accession" "$ncbi_raw"; then
+		echo "FETCH FAILED: $name ($accession)" >&2
+		fetch_failed+=("$name")
+		continue
+	fi
+
+	"$script_dir/unmask-genome" "$ncbi_raw" "$ncbi_unmasked"
+	"$script_dir/unmask-genome" "$f" "$local_unmasked"
+
+	if "$script_dir/compare-fasta" "$local_unmasked" "$ncbi_unmasked"; then
+		verified=$((verified + 1))
+	else
+		differed+=("$name")
+	fi
+
+	rm -f "$ncbi_raw" "$ncbi_unmasked" "$local_unmasked"
+done
+
+echo
+echo "Done: $matched file(s) had an NCBI accession ($skipped skipped, no accession in name)."
+echo "  $verified verified MATCH"
+echo "  ${#differed[@]} DIFFER"
+echo "  ${#fetch_failed[@]} fetch failed"
+if [ "${#differed[@]}" -gt 0 ]; then
+	printf 'Differed:\n'
+	printf '  %s\n' "${differed[@]}"
+fi
+if [ "${#fetch_failed[@]}" -gt 0 ]; then
+	printf 'Fetch failed:\n'
+	printf '  %s\n' "${fetch_failed[@]}"
+fi
+
+if [ "${#differed[@]}" -gt 0 ] || [ "${#fetch_failed[@]}" -gt 0 ]; then
+	exit 1
+fi

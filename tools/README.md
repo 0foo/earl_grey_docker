@@ -10,6 +10,9 @@
 * `bin/compare-fasta` — checks whether two FASTA files have the same sequences with `seqkit` (built on `run-bio`).
 * `bin/report-mask` — reports hard-mask (`N`) and soft-mask (lowercase) extent in a genome FASTA (built on `run-bio`).
 * `bin/batch-unmask` — runs `unmask-genome` over every file in a directory.
+* `bin/check-fasta` — validates that a file is well-formed FASTA/FASTQ (built on `run-bio`).
+* `bin/batch-check-fasta` — runs `check-fasta` over every file in a directory.
+* `bin/batch-verify-ncbi` — for every file in a directory whose name contains an NCBI accession, fetches that assembly and compares sequences.
 
 ## Prerequisites
 
@@ -59,4 +62,16 @@ Prefer these over calling `docker compose run` directly — they take real host 
 * `bin/batch-unmask <input-dir> <output-dir>` — runs `unmask-genome` on every file in `<input-dir>`, writing same-named files into `<output-dir>` (created if missing). A failure on one file is logged and skipped, not fatal to the batch; prints a success/failure summary at the end and exits `1` if anything failed. A failed conversion can leave a 0-byte stub at the output path — worth checking for (`find <output-dir> -type f -empty`) and removing before re-running.
   ```
   tools/bin/batch-unmask /data/bioinfo/data/genomes/1_masked_datasets/genomes_dhakad /data/bioinfo/data/genomes/2_unmasked_datasets
+  ```
+* `bin/check-fasta <file>` — validates the file parses as FASTA/FASTQ (`seqkit seq`, which fails hard on malformed input — unlike `seqkit stats`, which logs an error but still exits `0`). Prints `seqkit stats -a` on success. Exits `0`/`1`.
+  ```
+  tools/bin/check-fasta genome.fna.gz
+  ```
+* `bin/batch-check-fasta <dir>` — runs `check-fasta` over every file in `<dir>`; a failure is logged and skipped, not fatal. Prints a summary and exits `1` if anything was invalid.
+  ```
+  tools/bin/batch-check-fasta /data/bioinfo/data/genomes/1_masked_datasets/genomes_dhakad
+  ```
+* `bin/batch-verify-ncbi <dir>` — for every file in `<dir>` whose name contains an NCBI assembly accession (`GCF_`/`GCA_#########.#`), fetches that assembly from NCBI, unmasks both the fetched copy and the local file, and runs `compare-fasta` between them — so it verifies "same genome regardless of masking," not byte-identity. Files without a recognizable accession in the name (e.g. `*.nanopore.*`) are skipped. A fetch failure or a real sequence difference is logged per-file and does not stop the batch; downloaded copies are discarded after each comparison. Prints a summary (verified/differed/fetch-failed/skipped) and exits `1` if anything differed or failed to fetch.
+  ```
+  tools/bin/batch-verify-ncbi /data/bioinfo/data/genomes/2_unmasked_datasets
   ```
