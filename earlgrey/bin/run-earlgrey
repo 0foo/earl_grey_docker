@@ -153,5 +153,13 @@ if [ "$genome_dir" != "$output" ] && [[ "$genome_dir" != "$output"/* ]]; then
 	mounts+=(-v "$genome_dir:$genome_dir")
 fi
 
+# Sample host resource usage for just this run's duration, right alongside
+# its output — host-level (not per-container), which is accurate as long as
+# this is the only job running on the box (the normal case: run-queue.sh
+# runs one genome at a time).
+"$script_dir/monitor-resources.sh" "$dest/resource-usage.csv" 1 &
+monitor_pid=$!
+trap 'kill "$monitor_pid" 2>/dev/null || true' EXIT
+
 docker compose --progress quiet run --rm "${mounts[@]}" \
 	earlgrey -g "$genome" -s "$species" -o "$dest" -t "$threads"

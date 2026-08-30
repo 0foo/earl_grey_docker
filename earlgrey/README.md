@@ -5,6 +5,7 @@
 * `docker-compose.yml` — builds the image. No fixed data mount — mounts are added per invocation (see below).
 * `bin/run-earlgrey` — runs earlGrey from plain host paths (genome file, Dfam dir, output dir), skipping a species whose output already completed; dfam/output/threads can optionally come from a config file (`bin/run-earlgrey.conf.example`) instead of retyping them every run. [`../vps/run-queue.sh`](../vps/README.md) calls this once per genome to run a manifest slice.
 * `bin/generate-manifest` — lists genome FASTAs under an S3 prefix into a `<species>\t<genome-s3-uri>` manifest, consumed by [`../vps/`](../vps/README.md) to distribute genomes across multiple machines.
+* `bin/monitor-resources.sh` — samples host CPU/memory/swap/load once a second; `run-earlgrey` starts/stops this automatically around its Docker run (see below), so it's not usually invoked directly.
 
 ## Prerequisites
 
@@ -48,6 +49,8 @@ All paths are real paths on your local filesystem — nothing needs to live at a
 Rerunning with the same `genome-file`/`species` is resume-safe: if `<output-dir>/<species>/<species>_EarlGrey/<species>_EarlGrey.log` already exists with no `<output-dir>/<species>/INCOMPLETE_RUN.txt` next to it (the marker `entrypoint.sh` writes on any non-zero exit), `run-earlgrey` skips the Docker run entirely and exits successfully. This is what lets `../vps/run-queue.sh` restart a whole manifest slice after a crash/reboot without redoing already-finished genomes.
 
 A `.gz` genome is auto-decompressed once into `<output-dir>/<species>/<species>.genome.fna` — a persistent, deterministic path, not a temp file — and reused as-is on a later rerun rather than regenerated. This is deliberate: earlGrey resumes a stopped run by checking which output files already exist, and its later stages end up referencing the genome path internally, so a rerun must see the *same* path or resume breaks (as it did when this used a randomly-named temp file deleted on exit). Clean up by deleting the whole `<output-dir>/<species>` directory, not this file alone.
+
+`run-earlgrey` also writes `<output-dir>/<species>/resource-usage.csv` — one row per second (`timestamp,cpu_pct,mem_used_mb,mem_total_mb,swap_used_mb,load1,load5,load15`) for just this run's duration, via `bin/monitor-resources.sh` started right before the Docker run and killed right after (success, failure, or interruption alike). It's host-level, not per-container — accurate as long as the box only runs one job at a time (the normal case for `run-queue.sh`), but would blend numbers from multiple jobs if you ever ran more than one concurrently on the same box. A retry on the same species overwrites this file with the new attempt's data rather than appending to the old one.
 
 Without the script, the equivalent manual command:
 
