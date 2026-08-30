@@ -29,12 +29,16 @@ all_statuses=""
 for job_id in $job_ids; do
 	children="$(aws batch list-jobs --array-job-id "$job_id" --query 'jobSummaryList[].status' --output text 2>/dev/null || true)"
 	if [ -n "$children" ]; then
-		echo "$job_id (array):"
+		echo "$job_id (array) — for one genome's logs: bin/batch-logs $job_id <index>"
+		aws batch list-jobs --array-job-id "$job_id" \
+			--query 'sort_by(jobSummaryList, &arrayProperties.index)[].[arrayProperties.index,status,statusReason]' \
+			--output table
+		echo "Status counts:"
 		tr '\t' '\n' <<<"$children" | sort | uniq -c | sort -rn
 		all_statuses="$all_statuses"$'\n'"$children"
 	else
 		top_status="$(aws batch describe-jobs --jobs "$job_id" --query 'jobs[0].status' --output text)"
-		echo "$job_id: $top_status"
+		echo "$job_id (single job — for logs: bin/batch-logs $job_id): $top_status"
 		all_statuses="$all_statuses"$'\n'"$top_status"
 	fi
 done

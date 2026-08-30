@@ -144,7 +144,7 @@ Adjust batch size freely — smaller if you want tighter control, larger once yo
 
 ### Monitoring & troubleshooting
 
-* `earlgrey/bin/batch-dashboard <JobQueueName>` — real per-genome status counts on the queue. Drills into each array job's children rather than trusting the array job's own top-level status, which can lag well behind (observed staying `PENDING` while children were actively `RUNNING` and syncing Dfam). Start here.
+* `earlgrey/bin/batch-dashboard <JobQueueName>` — every job/child on the queue with its array index, status, and reason, plus overall totals. Drills into each array job's children rather than trusting the array job's own top-level status, which can lag well behind (observed staying `PENDING` while children were actively `RUNNING` and syncing Dfam). Prints the exact `batch-logs` command for each job, so you always have the job ID/index you need on hand. Start here.
   ```
   earlgrey/bin/batch-dashboard earlgrey-queue
   ```
