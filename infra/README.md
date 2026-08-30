@@ -144,15 +144,20 @@ Adjust batch size freely — smaller if you want tighter control, larger once yo
 
 ### Monitoring & troubleshooting
 
-* `earlgrey/bin/batch-dashboard <JobQueueName> [log-group] [since]` — the one command for "show me everything": job counts by status on the queue, a per-array child breakdown for anything RUNNING/FAILED, and a recent CloudWatch log tail (default last 1h), all in one shot. Start here.
+* `earlgrey/bin/batch-dashboard <JobQueueName>` — job counts by status on the queue, plus a per-array child breakdown for anything RUNNING/FAILED. Start here.
   ```
   earlgrey/bin/batch-dashboard earlgrey-queue
-  earlgrey/bin/batch-dashboard earlgrey-queue /aws/batch/earlgrey 4h
   ```
 * `earlgrey/bin/batch-status <job-id>` — status + per-child breakdown for a single job (a narrower version of the dashboard's per-job section, useful once you already know the job ID you care about).
+* `earlgrey/bin/batch-logs <job-id> [array-index] [since]` — tails CloudWatch logs for one job. An array job's own container never has logs (only its children do), so pass its array-index to see one specific genome's log instead of the whole batch's.
+  ```
+  earlgrey/bin/batch-logs abcd1234-...          # plain (non-array) job
+  earlgrey/bin/batch-logs abcd1234-... 3        # array child 3
+  earlgrey/bin/batch-logs abcd1234-... 3 4h     # last 4h instead of the 1h default
+  ```
 * `earlgrey/bin/batch-failures <array-job-id> [retry-manifest.tsv]` — lists every failed child with its reason (OOM, Spot loss, or anything else) and writes a manifest of just those genomes, so a retry is one `submit-batch` call away instead of manually cross-referencing array indices against the manifest.
 * AWS Batch console → Jobs, or `aws batch list-jobs --job-queue <JobQueueName>` — see everything queued/running/failed.
-* Logs: CloudWatch Logs group `/aws/batch/earlgrey`, one stream per job attempt. Every manifest-mode job logs `Batch array index N: species=... genome=...` as its first line (before anything that could crash), so even a job that OOMs before earlGrey produces any output still identifies itself in its log stream.
+* Logs: CloudWatch Logs group `/aws/batch/earlgrey`, one stream per job attempt (`earlgrey/default/<ecs-task-id>`, viewable with `batch-logs` above). Every manifest-mode job logs `Batch array index N: species=... genome=...` as its first line (before anything that could crash), so even a job that OOMs before earlGrey produces any output still identifies itself in its log stream.
 * A job that fails with status reason matching `Host EC2*` was a Spot interruption — it auto-retries (up to 3 attempts total) with no action needed. A memory-related reason (e.g. "OutOfMemoryError...") means the job exceeded `JobMemoryMiB` **and** its swap allowance (`SwapSizeMiB`) — it does *not* auto-retry (retrying an OOM without changing anything would just fail again), so it needs either a resubmit at a smaller thread count or a bump to `JobMemoryMiB`/`SwapSizeMiB` for that genome. Any other reason means earlGrey itself failed — check its log stream.
 * Swap is a safety net, not a free one: a job that's genuinely thrashing on swap runs slow rather than failing fast, and could occupy a Spot instance for hours before hitting the 12h `Timeout` instead of failing (and freeing that instance) quickly. If a genome routinely runs far longer than the rest of a batch, that's worth checking for swap thrashing rather than assuming it's just a big genome.
 * First job on a fresh Spot instance takes longer (downloading + caching ~35GB of Dfam data); later jobs scheduled on the same instance skip that step. This is expected — see the `DFAM_S3_URI` handling in `earlgrey/entrypoint.sh`.

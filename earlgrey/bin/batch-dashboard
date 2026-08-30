@@ -2,21 +2,16 @@
 set -euo pipefail
 
 if [ $# -lt 1 ]; then
-	echo "Usage: $(basename "$0") <job-queue> [log-group] [since]" >&2
+	echo "Usage: $(basename "$0") <job-queue>" >&2
 	echo "  One-shot status dashboard: job counts by status on the queue," >&2
-	echo "  a per-array-job child breakdown for anything RUNNING or FAILED," >&2
-	echo "  and a recent tail of CloudWatch logs — everything batch-status/" >&2
-	echo "  list-jobs/CloudWatch would otherwise take several separate" >&2
-	echo "  commands to see." >&2
-	echo "  log-group defaults to /aws/batch/earlgrey, since defaults to 1h." >&2
+	echo "  and a per-array-job child breakdown for anything RUNNING or" >&2
+	echo "  FAILED — everything batch-status/list-jobs would otherwise take" >&2
+	echo "  several separate commands to see. For logs, see bin/batch-logs." >&2
 	echo "Example: $(basename "$0") earlgrey-queue" >&2
-	echo "Example: $(basename "$0") earlgrey-queue /aws/batch/earlgrey 4h" >&2
 	exit 1
 fi
 
 queue="$1"
-log_group="${2:-/aws/batch/earlgrey}"
-since="${3:-1h}"
 
 echo "=== Job counts on queue: $queue ==="
 for status in SUBMITTED PENDING RUNNABLE STARTING RUNNING SUCCEEDED FAILED; do
@@ -50,7 +45,3 @@ for status in RUNNING FAILED; do
 		fi
 	done <<<"$jobs"
 done
-
-echo
-echo "=== Recent logs (last $since) from $log_group ==="
-aws logs tail "$log_group" --since "$since" || echo "(no matching logs, or your AWS CLI doesn't support 'logs tail' — try: aws logs filter-log-events --log-group-name $log_group)"

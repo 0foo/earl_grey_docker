@@ -6,8 +6,9 @@
 * `bin/run-earlgrey` — runs earlGrey from plain host paths (genome file, Dfam dir, output dir), no config needed.
 * `bin/generate-manifest` — lists genome FASTAs under an S3 prefix into a `<species>\t<genome-s3-uri>` manifest, for AWS Batch.
 * `bin/submit-batch` — submits an AWS Batch array job for a slice of the manifest (so 200 genomes can run in controlled batches, not all at once).
-* `bin/batch-dashboard` — one-shot view of everything: job counts by status on the queue, a per-array child breakdown for anything RUNNING/FAILED, and a recent CloudWatch log tail, all in a single command.
+* `bin/batch-dashboard` — one-shot view of job counts by status on the queue, plus a per-array child breakdown for anything RUNNING/FAILED.
 * `bin/batch-status` — checks the status of a submitted Batch job, including per-child breakdown for array jobs.
+* `bin/batch-logs` — tails CloudWatch logs for one job; pass an array-index to see one specific child instead of the (log-less) array parent.
 * `bin/batch-failures` — lists failed children of an array job (OOM, Spot loss, or any other failure) with their reason, and writes a manifest of just those genomes, ready to feed back into `bin/submit-batch` for a retry.
 
 ## Prerequisites

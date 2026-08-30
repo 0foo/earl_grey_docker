@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -lt 1 ]; then
+	echo "Usage: $(basename "$0") <job-id> [array-index] [since]" >&2
+	echo "  Tails CloudWatch logs for one Batch job. An array job's own" >&2
+	echo "  container never has logs — pass its array-index to see one" >&2
+	echo "  specific child instead." >&2
+	echo "  since defaults to 1h (same format as 'aws logs tail --since')." >&2
+	echo "Example: $(basename "$0") abcd1234-...              # plain job" >&2
+	echo "Example: $(basename "$0") abcd1234-... 3            # array child 3" >&2
+	echo "Example: $(basename "$0") abcd1234-... 3 4h" >&2
+	exit 1
+fi
+
+job_id="$1"
+index="${2:-}"
+since="${3:-1h}"
+log_group="/aws/batch/earlgrey"
+
+target="$job_id"
+if [ -n "$index" ]; then
+	target="${job_id}:${index}"
+fi
+
+stream="$(aws batch describe-jobs --jobs "$target" --query 'jobs[0].container.logStreamName' --output text)"
+
+if [ -z "$stream" ] || [ "$stream" = "None" ]; then
+	echo "No log stream yet for $target — it may still be queued/pending, or (if this is an array job) you need to pass its array-index." >&2
+	exit 1
+fi
+
+echo "=== $log_group : $stream ===" >&2
+aws logs tail "$log_group" --log-stream-names "$stream" --since "$since"
