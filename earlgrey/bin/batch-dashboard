@@ -4,15 +4,38 @@ set -euo pipefail
 if [ $# -lt 1 ]; then
 	echo "Usage: $(basename "$0") <job-queue>" >&2
 	echo "  One-shot status dashboard: real per-genome status counts on the" >&2
-	echo "  queue. Drills into each array job's children rather than trusting" >&2
-	echo "  the array job's own top-level status, which can lag well behind" >&2
-	echo "  (observed staying PENDING while children were actively RUNNING)." >&2
-	echo "  For logs, see bin/batch-logs." >&2
+	echo "  queue, with runtime for each job/child. Drills into each array" >&2
+	echo "  job's children rather than trusting its own top-level status," >&2
+	echo "  which can lag well behind (observed staying PENDING while" >&2
+	echo "  children were actively RUNNING). For logs, see bin/batch-logs." >&2
 	echo "Example: $(basename "$0") earlgrey-queue" >&2
 	exit 1
 fi
 
 queue="$1"
+now_ms="$(date +%s%3N)"
+
+# ms -> "XhYm". Used for RUNNING jobs (elapsed so far) and completed ones
+# (their actual startedAt-to-stoppedAt duration).
+format_duration() {
+	local total_s=$(( $1 / 1000 ))
+	local h=$(( total_s / 3600 ))
+	local m=$(( (total_s % 3600) / 60 ))
+	printf '%dh%dm' "$h" "$m"
+}
+
+runtime_for() {
+	local started="$1" stopped="$2"
+	if [ -z "$started" ] || [ "$started" = "None" ]; then
+		echo "-"
+		return
+	fi
+	local end_ms="$now_ms"
+	if [ -n "$stopped" ] && [ "$stopped" != "None" ]; then
+		end_ms="$stopped"
+	fi
+	format_duration $((end_ms - started))
+}
 
 job_ids="$(for status in SUBMITTED PENDING RUNNABLE STARTING RUNNING SUCCEEDED FAILED; do
 	aws batch list-jobs --job-queue "$queue" --job-status "$status" \
@@ -30,15 +53,24 @@ for job_id in $job_ids; do
 	children="$(aws batch list-jobs --array-job-id "$job_id" --query 'jobSummaryList[].status' --output text 2>/dev/null || true)"
 	if [ -n "$children" ]; then
 		echo "$job_id (array) — for one genome's logs: bin/batch-logs $job_id <index>"
+		printf '%-6s %-10s %-8s %s\n' "Index" "Status" "Runtime" "Reason"
 		aws batch list-jobs --array-job-id "$job_id" \
-			--query 'sort_by(jobSummaryList, &arrayProperties.index)[].[arrayProperties.index,status,statusReason]' \
-			--output table
+			--query 'sort_by(jobSummaryList, &arrayProperties.index)[].[arrayProperties.index,status,startedAt,stoppedAt,statusReason]' \
+			--output text | while IFS=$'\t' read -r idx cstatus started stopped reason; do
+			if [ -z "$idx" ]; then
+				continue
+			fi
+			printf '%-6s %-10s %-8s %s\n' "$idx" "$cstatus" "$(runtime_for "$started" "$stopped")" "$reason"
+		done
 		echo "Status counts:"
 		tr '\t' '\n' <<<"$children" | sort | uniq -c | sort -rn
 		all_statuses="$all_statuses"$'\n'"$children"
 	else
-		top_status="$(aws batch describe-jobs --jobs "$job_id" --query 'jobs[0].status' --output text)"
-		echo "$job_id (single job — for logs: bin/batch-logs $job_id): $top_status"
+		top="$(aws batch describe-jobs --jobs "$job_id" --query 'jobs[0].[status,startedAt,stoppedAt]' --output text)"
+		top_status="$(cut -f1 <<<"$top")"
+		started="$(cut -f2 <<<"$top")"
+		stopped="$(cut -f3 <<<"$top")"
+		echo "$job_id (single job — for logs: bin/batch-logs $job_id): $top_status (runtime: $(runtime_for "$started" "$stopped"))"
 		all_statuses="$all_statuses"$'\n'"$top_status"
 	fi
 done

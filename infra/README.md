@@ -144,7 +144,7 @@ Adjust batch size freely — smaller if you want tighter control, larger once yo
 
 ### Monitoring & troubleshooting
 
-* `earlgrey/bin/batch-dashboard <JobQueueName>` — every job/child on the queue with its array index, status, and reason, plus overall totals. Drills into each array job's children rather than trusting the array job's own top-level status, which can lag well behind (observed staying `PENDING` while children were actively `RUNNING` and syncing Dfam). Prints the exact `batch-logs` command for each job, so you always have the job ID/index you need on hand. Start here.
+* `earlgrey/bin/batch-dashboard <JobQueueName>` — every job/child on the queue with its array index, status, runtime, and reason, plus overall totals. Drills into each array job's children rather than trusting the array job's own top-level status, which can lag well behind (observed staying `PENDING` while children were actively `RUNNING` and syncing Dfam). A completed job's runtime is its actual duration; a `RUNNING` job's is live elapsed time — a row that's `RUNNING` with a leftover `statusReason` and a runtime that just reset means it was interrupted (e.g. Spot) and auto-retried, not stuck. Prints the exact `batch-logs` command for each job, so you always have the job ID/index you need on hand. Start here.
   ```
   earlgrey/bin/batch-dashboard earlgrey-queue
   ```
@@ -161,11 +161,16 @@ Adjust batch size freely — smaller if you want tighter control, larger once yo
   earlgrey/bin/batch-logs-all abcd1234-...
   earlgrey/bin/batch-logs-all abcd1234-... logs/
   ```
+* `earlgrey/bin/batch-describe-all <job-id>` — prints the full `describe-jobs` status+attempts JSON (task ARN, log stream, start/stop times, statusReason per attempt — the retry-history detail `batch-status`'s counts don't show) for every child of an array job, one after another.
+  ```
+  earlgrey/bin/batch-describe-all abcd1234-...
+  ```
 * `earlgrey/bin/batch-failures <array-job-id> [retry-manifest.tsv]` — lists every failed child with its reason (OOM, Spot loss, or anything else) and writes a manifest of just those genomes, so a retry is one `submit-batch` call away instead of manually cross-referencing array indices against the manifest.
 * AWS Batch console → Jobs, or `aws batch list-jobs --job-queue <JobQueueName>` — see everything queued/running/failed.
 * Logs: CloudWatch Logs group `/aws/batch/earlgrey`, one stream per job attempt (`earlgrey/default/<ecs-task-id>`, viewable with `batch-logs` above). Every manifest-mode job logs `Batch array index N: species=... genome=...` as its first line (before anything that could crash), so even a job that OOMs before earlGrey produces any output still identifies itself in its log stream.
 * A job that fails with status reason matching `Host EC2*` was a Spot interruption — it auto-retries (up to 3 attempts total) with no action needed. A memory-related reason (e.g. "OutOfMemoryError...") means the job exceeded `JobMemoryMiB` **and** its swap allowance (`SwapSizeMiB`) — it does *not* auto-retry (retrying an OOM without changing anything would just fail again), so it needs either a resubmit at a smaller thread count or a bump to `JobMemoryMiB`/`SwapSizeMiB` for that genome. Any other reason means earlGrey itself failed — check its log stream.
 * Swap is a safety net, not a free one: a job that's genuinely thrashing on swap runs slow rather than failing fast, and could occupy a Spot instance for hours before hitting the 12h `Timeout` instead of failing (and freeing that instance) quickly. If a genome routinely runs far longer than the rest of a batch, that's worth checking for swap thrashing rather than assuming it's just a big genome.
+* If `entrypoint.sh` reaches its post-run code with a non-zero exit status (Spot interruption, OOM-kill, timeout, or any other early termination), it writes `INCOMPLETE_RUN.txt` into the output directory before syncing, so a partial result in S3 is never mistaken for a completed one or a still-running job — check for that file before trusting any output you find in S3 for a genome that doesn't show `SUCCEEDED`. Note this only covers a graceful-enough termination (there was a grace period to run this code, as Spot interruptions usually give) — a true instant hard-kill leaves nothing to check.
 * First job on a fresh Spot instance takes longer (downloading + caching ~35GB of Dfam data); later jobs scheduled on the same instance skip that step. This is expected — see the `DFAM_S3_URI` handling in `earlgrey/entrypoint.sh`.
 * earlGrey's memory use is driven by which repeat family a given thread is refining, not a fixed per-thread constant — a single RepeatModeler `Refiner` worker can spike far above average (observed ~60GB RSS on its own during local testing). `JobVcpus`/`JobMemoryMiB` are sized with that in mind (see the parameter table above); if a specific genome still OOMs, it likely has an unusually large repeat family (e.g. a satellite array) and may need a one-off resubmit at lower `THREADS`/higher `JobMemoryMiB` via `submit-batch`'s override, rather than raising the default for everything.
 
