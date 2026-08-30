@@ -85,13 +85,24 @@ Or skip the config files and pass the manifest positionally / point at a non-def
 
 ### 5. Monitor and handle failures
 
-No dashboard here — check in manually:
+Check in manually:
 
 ```
 tail -f queue-manifest-0N.log        # live progress on that box
 find /data/output -name '*_EarlGrey.log'   # what's actually finished
+cat /data/output/<species>/resource-usage.csv   # that species' own CPU/mem/swap/load history
 ```
 
 A failed genome is logged and the queue moves on — it doesn't stop the box. Resume behavior is automatic and safe: rerunning `run-queue.sh` on the same manifest slice re-invokes `run-earlgrey` per genome, which skips any species whose output already completed successfully (an `EarlGrey.log` exists with no `INCOMPLETE_RUN.txt` marker next to it — the same marker `entrypoint.sh` writes on any non-zero exit) and retries anything that's missing or was left incomplete. So if a box reboots or the queue script dies, just restart it with the same command.
 
 To go back and retry specifically the genomes that failed on a box, grep its log for `FAILED` and build a small manifest of just those lines, then rerun `run-queue.sh` against that instead of the full slice.
+
+### 6. Optional: live resource dashboard (Netdata)
+
+`resource-usage.csv` (above) is per-genome history; for a live, mobile-friendly view of the box as a whole (and per-container stats while a job is running), start [Netdata](https://www.netdata.cloud/):
+
+```
+docker compose -f ~/earl_grey_docker/vps/monitoring/docker-compose.yml up -d
+```
+
+Reachable at `http://<tailscale-ip>:19999` from any device on your tailnet — nowhere else, since it binds the host's network interfaces (including `tailscale0`) and the Robot firewall discards any new inbound connection from the public internet (see the firewall setup above). No extra firewall rule needed, same reasoning as SSH: Tailscale traffic is decrypted internally, so the firewall never sees "a connection to port 19999" from outside the tailnet at all.
