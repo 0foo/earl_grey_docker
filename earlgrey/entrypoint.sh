@@ -4,11 +4,68 @@ set -euo pipefail
 # Wraps earlGrey so -g/-o accept either a local path (bind-mounted for local
 # testing) or an s3:// URI (for AWS Batch): s3 inputs are downloaded before
 # the run, and if -o is an s3:// URI, results are synced back up afterward.
+#
+# AWS Batch array-job mode: if MANIFEST_S3_URI is set and no -g is passed as
+# an argument, the genome/species for this job are resolved from line
+# (AWS_BATCH_JOB_ARRAY_INDEX + 1) of that manifest — a tab-separated
+# "<species>\t<genome-s3-uri>" file. OUTPUT_S3_PREFIX then supplies -o as
+# "<prefix>/<species>", and THREADS (if set) supplies -t.
+#
+# DFAM_S3_URI, if set, is synced once per EC2 host into the fixed famdb path
+# below instead of requiring a bind mount or baking Dfam into the image —
+# the Batch job definition host-mounts that path so every job on the same
+# instance shares the cache. A flock guards concurrent jobs on the same host
+# from downloading it twice.
+
+dfam_path="/opt/conda/envs/earlgrey/share/famdb-3.0.0/Libraries/famdb"
+
+if [ -n "${DFAM_S3_URI:-}" ]; then
+	mkdir -p "$dfam_path"
+	(
+		flock -x 200
+		if [ ! -e "$dfam_path/.cache-complete" ]; then
+			echo "Caching Dfam data from $DFAM_S3_URI to $dfam_path ..." >&2
+			aws s3 sync "$DFAM_S3_URI" "$dfam_path"
+			touch "$dfam_path/.cache-complete"
+		fi
+	) 200>"$dfam_path/.download.lock"
+fi
+
+args=("$@")
+
+if [ -n "${MANIFEST_S3_URI:-}" ]; then
+	has_g=0
+	for a in "${args[@]}"; do
+		if [ "$a" = "-g" ]; then
+			has_g=1
+		fi
+	done
+	if [ "$has_g" -eq 0 ]; then
+		index="${AWS_BATCH_JOB_ARRAY_INDEX:-0}"
+		manifest_local="/tmp/earlgrey-manifest.tsv"
+		aws s3 cp "$MANIFEST_S3_URI" "$manifest_local"
+		line="$(sed -n "$((index + 1))p" "$manifest_local")"
+		if [ -z "$line" ]; then
+			echo "No manifest line at index $index in $MANIFEST_S3_URI" >&2
+			exit 1
+		fi
+		species="$(cut -f1 <<<"$line")"
+		genome_uri="$(cut -f2 <<<"$line")"
+		: "${OUTPUT_S3_PREFIX:?OUTPUT_S3_PREFIX must be set when MANIFEST_S3_URI is used}"
+		# Printed unconditionally, before anything that could OOM/crash, so a
+		# failed job's CloudWatch log always identifies which genome it was
+		# even if earlGrey itself never got to log anything.
+		echo "Batch array index ${index}: species=${species} genome=${genome_uri}" >&2
+		args+=(-g "$genome_uri" -s "$species" -o "${OUTPUT_S3_PREFIX%/}/$species")
+		if [ -n "${THREADS:-}" ]; then
+			args+=(-t "$THREADS")
+		fi
+	fi
+fi
 
 genome_local=""
 output_local=""
 output_s3=""
-args=("$@")
 new_args=()
 
 i=0

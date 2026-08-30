@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -lt 1 ]; then
+	echo "Usage: $(basename "$0") <array-job-id> [retry-manifest-output-path]" >&2
+	echo "  Lists failed child jobs of an AWS Batch array job submitted by" >&2
+	echo "  submit-batch (OOM, Spot loss, or any other non-zero exit) with" >&2
+	echo "  their status reason, and writes a manifest of just those genomes" >&2
+	echo "  (same '<species>\\t<genome-s3-uri>' format as generate-manifest)" >&2
+	echo "  so they can be resubmitted with submit-batch." >&2
+	echo "Example: $(basename "$0") abcd1234-... retry-manifest.tsv" >&2
+	exit 1
+fi
+
+job_id="$1"
+out="${2:-retry-manifest.tsv}"
+
+manifest_s3="$(aws batch describe-jobs --jobs "$job_id" \
+	--query 'jobs[0].container.environment[?name==`MANIFEST_S3_URI`].value | [0]' --output text)"
+
+if [ -z "$manifest_s3" ] || [ "$manifest_s3" = "None" ]; then
+	echo "Could not find MANIFEST_S3_URI on job $job_id — is this an earlgrey array job submitted via submit-batch?" >&2
+	exit 1
+fi
+
+manifest_local="$(mktemp)"
+trap 'rm -f "$manifest_local"' EXIT
+aws s3 cp "$manifest_s3" "$manifest_local" --only-show-errors
+
+failed="$(aws batch list-jobs --array-job-id "$job_id" --job-status FAILED \
+	--query 'jobSummaryList[].[arrayProperties.index,statusReason]' --output text)"
+
+if [ -z "$failed" ]; then
+	echo "No failed child jobs found for array job $job_id." >&2
+	exit 0
+fi
+
+: >"$out"
+echo "Failed children:" >&2
+while IFS=$'\t' read -r idx reason; do
+	if [ -z "$idx" ]; then
+		continue
+	fi
+	echo "  index $idx: ${reason:-(no reason recorded)}" >&2
+	sed -n "$((idx + 1))p" "$manifest_local" >>"$out"
+done <<<"$failed"
+
+n="$(wc -l <"$out" | tr -d ' ')"
+echo "Wrote $n failed genome(s) to $out — resubmit with:" >&2
+echo "  submit-batch $out 1 $n <job-queue> <job-definition> <output-s3-prefix> <dfam-s3-uri>" >&2

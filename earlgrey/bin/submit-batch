@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -lt 7 ]; then
+	cat >&2 <<'USAGE'
+Usage: submit-batch <manifest.tsv> <start-line> <count> <job-queue> <job-definition> <output-s3-prefix> <dfam-s3-uri> [threads]
+
+  manifest.tsv       Local manifest file (see generate-manifest), one
+                      "<species>\t<genome-s3-uri>" line per genome.
+  start-line         1-based line number to start this batch at.
+  count              Number of genomes to include (clamped to what's left
+                      in the manifest).
+  job-queue          AWS Batch job queue name (batch.yaml output JobQueueName).
+  job-definition     AWS Batch job definition name (batch.yaml output
+                      JobDefinitionName), optionally ":revision".
+  output-s3-prefix   s3:// prefix results are written under, one subfolder
+                      per species, e.g. s3://my-bucket/output.
+  dfam-s3-uri        s3:// URI of the Dfam famdb directory to cache per host.
+  threads            vCPUs to pass as -t (default 10 — should match the job
+                      definition's JobVcpus, since earlGrey needs ~10-12GB
+                      RAM/thread and JobMemoryMiB is sized off that same
+                      number).
+
+The manifest slice for this batch is uploaded to
+  <output-s3-prefix's bucket>/_batch-manifests/
+so the container can fetch it at runtime by index.
+
+Example (first 5 genomes, as a pilot batch):
+  submit-batch manifest.tsv 1 5 earlgrey-queue earlgrey-job \
+    s3://my-bucket/output s3://my-bucket/dfam_data
+
+Example (next 25):
+  submit-batch manifest.tsv 6 25 earlgrey-queue earlgrey-job \
+    s3://my-bucket/output s3://my-bucket/dfam_data
+USAGE
+	exit 1
+fi
+
+manifest="$1"
+start="$2"
+count="$3"
+queue="$4"
+job_def="$5"
+output_prefix="${6%/}"
+dfam_uri="$7"
+threads="${8:-10}"
+
+[ -f "$manifest" ] || {
+	echo "manifest not found: $manifest" >&2
+	exit 1
+}
+[[ "$output_prefix" == s3://* ]] || {
+	echo "output-s3-prefix must be an s3:// URI" >&2
+	exit 1
+}
+[[ "$dfam_uri" == s3://* ]] || {
+	echo "dfam-s3-uri must be an s3:// URI" >&2
+	exit 1
+}
+
+total="$(wc -l <"$manifest" | tr -d ' ')"
+if [ "$start" -lt 1 ] || [ "$start" -gt "$total" ]; then
+	echo "start-line $start is out of range (manifest has $total lines)" >&2
+	exit 1
+fi
+
+end=$((start + count - 1))
+if [ "$end" -gt "$total" ]; then
+	end="$total"
+fi
+actual_count=$((end - start + 1))
+
+bucket="$(sed -E 's#^s3://([^/]+)/?.*#\1#' <<<"$output_prefix")"
+slice_name="batch-$(date -u +%Y%m%dT%H%M%SZ)-${start}-${end}.tsv"
+slice_local="$(mktemp)"
+trap 'rm -f "$slice_local"' EXIT
+sed -n "${start},${end}p" "$manifest" >"$slice_local"
+
+slice_s3="s3://${bucket}/_batch-manifests/${slice_name}"
+aws s3 cp "$slice_local" "$slice_s3"
+
+echo "Submitting ${actual_count} genome(s) (manifest lines ${start}-${end}) from $manifest" >&2
+echo "  manifest slice: $slice_s3" >&2
+
+env_overrides="environment=[{name=MANIFEST_S3_URI,value=$slice_s3},{name=OUTPUT_S3_PREFIX,value=$output_prefix},{name=DFAM_S3_URI,value=$dfam_uri},{name=THREADS,value=$threads}]"
+
+if [ "$actual_count" -eq 1 ]; then
+	# AWS Batch array jobs require size >= 2 — a single-genome batch runs
+	# as a plain job instead (entrypoint.sh defaults its index to 0).
+	aws batch submit-job \
+		--job-name "earlgrey-${start}-${end}" \
+		--job-queue "$queue" \
+		--job-definition "$job_def" \
+		--container-overrides "$env_overrides"
+else
+	aws batch submit-job \
+		--job-name "earlgrey-${start}-${end}" \
+		--job-queue "$queue" \
+		--job-definition "$job_def" \
+		--array-properties "size=$actual_count" \
+		--container-overrides "$env_overrides"
+fi
