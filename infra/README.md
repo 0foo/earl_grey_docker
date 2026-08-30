@@ -144,9 +144,10 @@ Adjust batch size freely — smaller if you want tighter control, larger once yo
 
 ### Monitoring & troubleshooting
 
-* `earlgrey/bin/batch-dashboard <JobQueueName>` — every job/child on the queue with its array index, status, runtime, and reason, plus overall totals. Drills into each array job's children rather than trusting the array job's own top-level status, which can lag well behind (observed staying `PENDING` while children were actively `RUNNING` and syncing Dfam). A completed job's runtime is its actual duration; a `RUNNING` job's is live elapsed time — a row that's `RUNNING` with a leftover `statusReason` and a runtime that just reset means it was interrupted (e.g. Spot) and auto-retried, not stuck. Prints the exact `batch-logs` command for each job, so you always have the job ID/index you need on hand. Start here.
+* `earlgrey/bin/batch-dashboard <JobQueueName> [--raw]` — every job/child on the queue with its array index, status, runtime, and reason, plus overall totals. Drills into each array job's children rather than trusting the array job's own top-level status, which can lag well behind (observed staying `PENDING` while children were actively `RUNNING` and syncing Dfam). A completed job's runtime is its actual duration; a `RUNNING` job's is live elapsed time — a row that's `RUNNING` with a leftover `statusReason` and a runtime that just reset means it was interrupted (e.g. Spot) and auto-retried, not stuck. Prints the exact `batch-logs` command for each job, so you always have the job ID/index you need on hand. Start here.
   ```
   earlgrey/bin/batch-dashboard earlgrey-queue
+  earlgrey/bin/batch-dashboard earlgrey-queue --raw   # + full describe-jobs JSON (task ARN, attempts, container) per job/child
   ```
 * `earlgrey/bin/batch-status <job-id>` — status + per-child breakdown for a single job (a narrower version of the dashboard's per-job section, useful once you already know the job ID you care about).
 * `earlgrey/bin/batch-logs <job-id> [array-index] [since]` — tails CloudWatch logs for one job. An array job's own container never has logs (only its children do), so pass its array-index to see one specific genome's log instead of the whole batch's.
