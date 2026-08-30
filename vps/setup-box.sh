@@ -4,8 +4,8 @@ set -euo pipefail
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
 	echo "Usage: $(basename "$0") [swap-size-gib]" >&2
 	echo "  One-time setup for a dedicated/VPS box, run from within the" >&2
-	echo "  cloned repo (as vps/setup-box.sh): installs Docker, Tailscale, and" >&2
-	echo "  the AWS CLI if missing, creates a swap file (default 96GiB — a single" >&2
+	echo "  cloned repo (as vps/setup-box.sh): installs Docker, Tailscale, the" >&2
+	echo "  AWS CLI, and Ansible if missing, creates a swap file (default 96GiB — a single" >&2
 	echo "  RepeatModeler worker has been observed spiking to ~60GB RSS by" >&2
 	echo "  itself) if not already present, and builds the earlgrey image" >&2
 	echo "  from ../earlgrey relative to this script, tagged 'latest'." >&2
@@ -42,6 +42,11 @@ if ! command -v aws >/dev/null 2>&1; then
 	unzip -q -o /tmp/awscliv2.zip -d /tmp
 	/tmp/aws/install
 	rm -rf /tmp/awscliv2.zip /tmp/aws
+fi
+
+if ! command -v ansible >/dev/null 2>&1; then
+	echo "Installing Ansible..." >&2
+	apt-get update && apt-get install -y ansible
 fi
 
 if swapon --show | grep -q '/swapfile'; then

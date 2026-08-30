@@ -1,37 +1,41 @@
 services:
-  netdata:
-    image: netdata/netdata:stable
-    container_name: netdata
+  glances:
+    image: nicolargo/glances:latest
+    container_name: glances
     restart: unless-stopped
-    # Host networking/PID namespace: needed for accurate host-level stats
-    # (not just the container's own), and puts the web UI directly on the
-    # host's network interfaces — including tailscale0, which is the point:
-    # reachable at http://<tailscale-ip>:19999 from the tailnet, unreachable
-    # from the public internet since the Robot firewall discards new
-    # inbound connections that aren't Tailscale/established/ICMP/DNS (see
+    # Host PID/network: needed for accurate host-level stats (not just the
+    # container's own), and puts the web UI directly on the host's network
+    # interfaces — including tailscale0, which is the point: reachable at
+    # http://<tailscale-ip>:61208 from the tailnet, unreachable from the
+    # public internet since the Robot firewall discards new inbound
+    # connections that aren't Tailscale/established/ICMP/DNS (see
     # ../README.md).
-    network_mode: host
     pid: host
-    cap_add:
-      - SYS_PTRACE
-      - SYS_ADMIN
-    security_opt:
-      - apparmor:unconfined
+    network_mode: host
+    environment:
+      - GLANCES_OPT=-w
     volumes:
-      - netdataconfig:/etc/netdata
-      - netdatalib:/var/lib/netdata
-      - netdatacache:/var/cache/netdata
-      - /etc/passwd:/host/etc/passwd:ro
-      - /etc/group:/host/etc/group:ro
-      - /proc:/host/proc:ro
-      - /sys:/host/sys:ro
-      - /etc/os-release:/host/etc/os-release:ro
-      # Read-only Docker socket access: lets Netdata's cgroups collector
-      # show per-container CPU/mem too, e.g. the earlgrey container while
-      # a job is running.
+      # Read-only Docker socket access: lets Glances show per-container
+      # CPU/mem too, e.g. the earlgrey container while a job is running.
+      # Drop this line if you don't want that — host stats work without it.
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
+  filebrowser:
+    image: filebrowser/filebrowser:latest
+    container_name: filebrowser
+    restart: unless-stopped
+    # Bridge networking + a published port is fine here (no host-level
+    # stats to collect, unlike glances) — reachability is still gated the
+    # same way: the Robot firewall discards new inbound connections from
+    # the public internet regardless of how Docker publishes the port, so
+    # this ends up tailnet-only just like glances above.
+    ports:
+      - "8080:80"
+    volumes:
+      - /data:/srv
+      - filebrowser-db:/database
+      - filebrowser-config:/config
+
 volumes:
-  netdataconfig:
-  netdatalib:
-  netdatacache:
+  filebrowser-db:
+  filebrowser-config:
