@@ -7,9 +7,11 @@ if [ $# -lt 1 ]; then
 	echo "  container never has logs — pass its array-index to see one" >&2
 	echo "  specific child instead." >&2
 	echo "  since defaults to 1h (same format as 'aws logs tail --since')." >&2
+	echo "  Pass 'all' for since to fetch the complete log, unfiltered by time." >&2
 	echo "Example: $(basename "$0") abcd1234-...              # plain job" >&2
 	echo "Example: $(basename "$0") abcd1234-... 3            # array child 3" >&2
 	echo "Example: $(basename "$0") abcd1234-... 3 4h" >&2
+	echo "Example: $(basename "$0") abcd1234-... 3 all        # full log" >&2
 	exit 1
 fi
 
@@ -31,4 +33,9 @@ if [ -z "$stream" ] || [ "$stream" = "None" ]; then
 fi
 
 echo "=== $log_group : $stream ===" >&2
-aws logs tail "$log_group" --log-stream-names "$stream" --since "$since"
+if [ "$since" = "all" ]; then
+	aws logs get-log-events --log-group-name "$log_group" --log-stream-name "$stream" \
+		--start-from-head --output text --query 'events[].message'
+else
+	aws logs tail "$log_group" --log-stream-names "$stream" --since "$since"
+fi
