@@ -1,12 +1,12 @@
-## Running earlGrey on dedicated/VPS boxes instead of AWS Batch
+## Running earlGrey on dedicated/VPS boxes
 
-An alternative to [`../infra/`](../infra/README.md)'s AWS Batch setup, for when the Spot/On-Demand cost doesn't fit the budget. Cheap 64GB-RAM dedicated servers (e.g. Hetzner's Server Auction) can run the same 200-genome workload for a fraction of the AWS cost — but with **none of Batch's automation**: no job queue, no auto-retry on interruption, no auto-scaling, no `batch-dashboard`. This directory is a much simpler, manual equivalent: each box works sequentially through its own fixed slice of the genome manifest.
+Cheap 64GB-RAM dedicated servers (e.g. Hetzner's Server Auction) can run the 200-genome earlGrey workload for a fraction of what cloud compute costs, at the cost of doing the orchestration yourself: no managed job queue, no auto-retry, no auto-scaling, no dashboard. Each box just works sequentially through its own fixed slice of the genome manifest.
 
-Same image, same `entrypoint.sh`, unchanged — its `-g`/`-o` S3 handling and `DFAM_S3_URI` per-host caching already work outside Batch with no modification. The only new pieces here are the per-box setup and the work-queue loop.
+Same image, same `entrypoint.sh`, unchanged — its `-g`/`-o` S3 handling and `DFAM_S3_URI` per-host caching already work standalone with no modification (S3 remains the shared data store for genomes/Dfam/output regardless of where the compute runs). The only new pieces here are the per-box setup and the work-queue loop.
 
 ### 1. Create an IAM user for these boxes
 
-Batch's EC2 instances get S3/ECR access via an IAM role automatically; a box outside AWS needs an IAM **user** with an access key instead. Scope it narrowly — same permissions as the Batch job role, plus ECR pull:
+These boxes aren't AWS-hosted, so there's no instance role to lean on — they need an IAM **user** with an access key instead, scoped to just S3 read/write on the data bucket (the image is built locally on each box from a git clone, so there's no ECR/container-registry permission needed at all):
 
 ```
 aws iam create-user --user-name earlgrey-vps
@@ -14,9 +14,7 @@ aws iam put-user-policy --user-name earlgrey-vps --policy-name earlgrey-vps-acce
   "Version": "2012-10-17",
   "Statement": [
     {"Effect": "Allow", "Action": "s3:ListBucket", "Resource": "arn:aws:s3:::my-bioinfo-refdata-2026"},
-    {"Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject"], "Resource": "arn:aws:s3:::my-bioinfo-refdata-2026/*"},
-    {"Effect": "Allow", "Action": ["ecr:GetAuthorizationToken"], "Resource": "*"},
-    {"Effect": "Allow", "Action": ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"], "Resource": "arn:aws:ecr:us-east-1:219647033290:repository/earlgrey-insects"}
+    {"Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject"], "Resource": "arn:aws:s3:::my-bioinfo-refdata-2026/*"}
   ]
 }'
 aws iam create-access-key --user-name earlgrey-vps
@@ -35,36 +33,39 @@ vps/partition-manifest manifest.tsv 5
 
 ### 3. Set up each box
 
-Provision the box (e.g. a Hetzner Server Auction Ryzen 5 3600 / 64GB RAM / 2x2TB dedicated server), then per box:
+Provision the box (e.g. a Hetzner Server Auction Ryzen 5 3600 / 64GB RAM / 2x2TB dedicated server), then per box — only the setup script and this box's manifest slice need copying over; everything else comes from the clone:
 
 ```
-scp manifest-0N.tsv vps/setup-box.sh vps/run-queue.sh root@<box-ip>:~
+scp manifest-0N.tsv vps/setup-box.sh root@<box-ip>:~
 ssh root@<box-ip>
 
-aws configure   # paste the earlgrey-vps access key/secret, set a default region
-./setup-box.sh 219647033290.dkr.ecr.us-east-1.amazonaws.com/earlgrey-insects 7.3.1
+TAILSCALE_AUTHKEY=tskey-... ./setup-box.sh git@0foo:0foo/earl_grey_docker.git 7.3.1
 ```
 
-`setup-box.sh` installs Docker if missing, creates a **96GiB swap file** (same OOM safety net as the AWS side — a single RepeatModeler worker has been observed spiking to ~60GB RSS by itself, and 2TB of disk makes this cheap insurance), and pulls the image from ECR.
+`setup-box.sh` installs Docker and git if missing, creates a **96GiB swap file** (same OOM safety net as the AWS side — a single RepeatModeler worker has been observed spiking to ~60GB RSS by itself, and 2TB of disk makes this cheap insurance), then clones (or pulls, if already cloned) the repo and builds the image locally — no AWS/ECR dependency for the image itself. If the repo URL is a private SSH remote, this box needs its own deploy key added to it, or your existing key copied over, before the clone will succeed.
+
+If `TAILSCALE_AUTHKEY` is set, it also installs Tailscale and joins your tailnet non-interactively — no browser-click prompt, so this works unattended across all 5 boxes. Generate a **reusable** key (so the same one works for every box) at [login.tailscale.com/admin/settings/keys](https://login.tailscale.com/admin/settings/keys); omit the env var to skip Tailscale entirely, or run `tailscale up` manually later. Once joined, SSH into a box by its tailnet name/IP instead of its public one if you'd rather not expose SSH publicly.
 
 ### 4. Run the queue
 
 This runs for days/weeks unattended — use `tmux`/`screen`/`nohup` so it survives your SSH session ending:
 
 ```
+aws configure   # paste the earlgrey-vps access key/secret, set a default region
+
 tmux new -s earlgrey
-./run-queue.sh 219647033290.dkr.ecr.us-east-1.amazonaws.com/earlgrey-insects:7.3.1 \
+~/earl_grey_docker/vps/run-queue.sh earlgrey-insects:7.3.1 \
   manifest-0N.tsv s3://my-bioinfo-refdata-2026/dfam_data s3://my-bioinfo-refdata-2026/output 4
 # Ctrl-B D to detach; tmux attach -t earlgrey to check back in
 ```
 
-`threads` (last arg, default 4) is sized for 64GB RAM at ~12GB/thread with headroom — see the box-sizing rationale in [`../infra/README.md`](../infra/README.md)'s parameter table. Adjust down if a box has less RAM, or up cautiously if you've confirmed headroom.
+`threads` (last arg, default 4) is sized for 64GB RAM at ~12GB/thread with headroom: earlGrey's RepeatModeler/RepeatMasker stack runs ~10-12GB RAM per thread, and a single worker has been observed spiking to ~60GB RSS on its own — 4 threads leaves real margin against that on a 64GB box, backstopped by the swap file `setup-box.sh` creates. Adjust down if a box has less RAM, or up cautiously if you've confirmed headroom on yours.
 
 Dfam is downloaded once into `/root/dfam-cache` (host-mounted into every container run) and reused for every genome on that box — **not** re-downloaded per genome, which would otherwise mean 40+ redundant ~35GB downloads per box and real S3 egress cost (unlike AWS Batch, this transfer is a genuine cross-internet download from S3, not free intra-AWS traffic).
 
 ### 5. Monitor and handle failures
 
-No `batch-dashboard` equivalent — check in manually:
+No dashboard here — check in manually:
 
 ```
 tail -f queue-manifest-0N.log     # live progress on that box

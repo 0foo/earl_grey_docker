@@ -1,16 +1,10 @@
 ## What's here
 
 * `Dockerfile` — builds `earlgrey-insects:7.3.1` (Earl Grey 7.3.1 + Python 3.11 + awscli).
-* `entrypoint.sh` — wraps `earlGrey` so `-g`/`-o` accept local paths or `s3://` URIs, for local + AWS Batch use.
+* `entrypoint.sh` — wraps `earlGrey` so `-g`/`-o` accept local paths or `s3://` URIs, for local runs and the [`../vps/`](../vps/README.md) work-queue.
 * `docker-compose.yml` — builds the image. No fixed data mount — mounts are added per invocation (see below).
 * `bin/run-earlgrey` — runs earlGrey from plain host paths (genome file, Dfam dir, output dir), no config needed.
-* `bin/generate-manifest` — lists genome FASTAs under an S3 prefix into a `<species>\t<genome-s3-uri>` manifest, for AWS Batch.
-* `bin/submit-batch` — submits an AWS Batch array job for a slice of the manifest (so 200 genomes can run in controlled batches, not all at once).
-* `bin/batch-dashboard` — one-shot status view. Pass a job queue name to see every job/child on it, or a specific job ID to see just that one, with its array index, status, runtime, and reason (drilling into each array job's children rather than trusting its own top-level status, which can lag well behind — observed staying PENDING while children were actively RUNNING), plus the exact `bin/batch-logs` command to see any one genome's logs. A `RUNNING` row with a leftover `statusReason` and a runtime that just reset is a quick tell that it was interrupted and auto-retried, not stuck. Also lists the compute environment's running EC2 instances with an estimated cost so far. Pass `--raw` to also dump the full `describe-jobs` JSON (task ARN, attempts, container details) for every job/child.
-* `bin/batch-logs` — tails CloudWatch logs for one job; pass an array-index to see one specific child instead of the (log-less) array parent. Pass `all` as the `since` arg for the complete log instead of a time window.
-* `bin/batch-logs-all` — fetches the complete log for every child of an array job in one shot, one file per genome.
-* `bin/batch-describe-all` — prints the full `describe-jobs` status+attempts JSON (task ARN, log stream, start/stop times, statusReason per attempt) for every child of an array job, one after another.
-* `bin/batch-failures` — lists failed children of an array job (OOM, Spot loss, or any other failure) with their reason, and writes a manifest of just those genomes, ready to feed back into `bin/submit-batch` for a retry.
+* `bin/generate-manifest` — lists genome FASTAs under an S3 prefix into a `<species>\t<genome-s3-uri>` manifest, consumed by [`../vps/`](../vps/README.md) to distribute genomes across multiple machines.
 
 ## Prerequisites
 
@@ -54,16 +48,14 @@ docker compose run --rm \
 docker run --rm -v /data/bioinfo/data/output:/data/bioinfo/data/output busybox rm -rf /data/bioinfo/data/output
 ```
 
-## Run on AWS Batch
+## Run against S3 (ad hoc, or as part of the vps/ work-queue)
 
-Full setup: CloudFormation for the infra (`infra/cloudformation/`, see [`infra/README.md`](../infra/README.md)), EC2 Spot compute (diversified instance types, automatic retry on interruption), and Dfam cached per-host from S3 rather than baked into the image or mounted via EFS (cheaper — no EFS storage/throughput cost, no giant image).
-
-Single ad-hoc job (no manifest), same image/entrypoint as local, `s3://` URIs instead of local paths:
+Same image/entrypoint as local, `s3://` URIs instead of local paths:
 
 ```
 -g s3://my-bucket/genomes/<genome>.fna.gz -s <species> -o s3://my-bucket/output/<species>
 ```
 
-`-g` is downloaded and auto-unzipped if `.gz`; `-o` runs locally then syncs to S3 on completion. `DFAM_S3_URI` (env var) triggers a one-time-per-host Dfam cache sync into the fixed famdb path instead of a bind mount. AWS credentials come from the Batch job's IAM role.
+`-g` is downloaded and auto-unzipped if `.gz`; `-o` runs locally then syncs to S3 on completion. `DFAM_S3_URI` (env var) triggers a one-time-per-host Dfam cache sync into the fixed famdb path instead of a bind mount. AWS credentials come from whatever's available in the environment — an IAM role if running on an AWS host, or an `~/.aws` mount / `AWS_*` env vars otherwise.
 
-For running the actual 200-genome workload in controlled batches (not all at once), see `bin/generate-manifest`, `bin/submit-batch`, and `bin/batch-dashboard`, and the walkthrough in [`infra/README.md`](../infra/README.md).
+For running many genomes across multiple machines (not all on one box), see [`../vps/README.md`](../vps/README.md), which uses `bin/generate-manifest` to build the genome list and this same image/entrypoint per machine.

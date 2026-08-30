@@ -16,7 +16,7 @@ if [ $# -lt 4 ]; then
 	echo "  headroom, since a single RepeatModeler worker has been observed" >&2
 	echo "  spiking to ~60GB RSS by itself; the setup script's swap file is" >&2
 	echo "  the backstop if that headroom isn't enough." >&2
-	echo "Example: $(basename "$0") 219647033290.dkr.ecr.us-east-1.amazonaws.com/earlgrey-insects:7.3.1 \\" >&2
+	echo "Example: $(basename "$0") earlgrey-insects:7.3.1 \\" >&2
 	echo "    manifest-01.tsv s3://my-bucket/dfam_data s3://my-bucket/output" >&2
 	exit 1
 fi
