@@ -1,19 +1,15 @@
 # Copy to run-queue.conf (in the directory you run run-queue.sh from, or
-# point at this file with --config <path>) to avoid retyping the same
-# manifest/--image/--dfam/--output/--threads on every invocation. Any of
-# these can still be overridden — MANIFEST by a positional arg, the rest
-# by a --flag — when you run the script; a positional arg/flag wins.
+# point at this file with --config <path>) to avoid retyping the manifest
+# slice on every invocation. MANIFEST can still be overridden with a
+# positional arg when you run the script — a positional arg wins.
 
-# Each box has its own fixed manifest slice (see vps/README.md), so it's
-# usually fine to bake it into this box's config file — leave unset and
-# pass the manifest positionally instead if you'd rather not.
+# Each box has its own fixed manifest slice (see vps/README.md).
 MANIFEST=manifest-01.tsv
 
-IMAGE=earlgrey-insects:latest
-
-# Either an s3:// URI or a local path — see vps/README.md for both forms.
-DFAM=/data/dfam_data
-OUTPUT=/data/output
-
-# Sized for 64GB RAM at ~12GB/thread with headroom — see vps/README.md.
-THREADS=4
+# Dfam/output/threads are NOT configured here — they live in run-earlgrey's
+# own config file instead (see ../earlgrey/bin/run-earlgrey.conf.example),
+# since this script just iterates the manifest and hands each genome off to
+# run-earlgrey. Uncomment only if that config file isn't at run-earlgrey's
+# default lookup location (./run-earlgrey.conf in the directory you run
+# run-queue.sh from):
+# EARLGREY_CONFIG=/path/to/run-earlgrey.conf

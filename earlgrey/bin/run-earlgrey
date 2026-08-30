@@ -12,6 +12,10 @@ print_usage() {
 	echo "    --dfam <dir>      Dfam famdb directory. Required (flag or config)." >&2
 	echo "    --output <dir>    Output directory. Required (flag or config)." >&2
 	echo "    --threads <n>     Threads to use. Default: 4." >&2
+	echo "  Skips this species if its output already completed successfully" >&2
+	echo "  (resume-safe across restarts — detected by an EarlGrey log" >&2
+	echo "  existing with no INCOMPLETE_RUN.txt marker next to it, the same" >&2
+	echo "  marker entrypoint.sh writes on any non-zero exit)." >&2
 	echo "Example (config file supplies dfam/output/threads):" >&2
 	echo "  $(basename "$0") genome.fna.gz dmel" >&2
 	echo "Example (all flags): $(basename "$0") genome.fna.gz dmel \\" >&2
@@ -99,20 +103,33 @@ genome="$(realpath -m "$genome_arg")"
 dfam="$(realpath -m "$dfam")"
 output="$(realpath -m "$output")"
 
-mkdir -p "$output"
+# Each species gets its own subdirectory under the shared $output root —
+# not just for organization, but because entrypoint.sh writes
+# INCOMPLETE_RUN.txt directly into whatever -o path it's given, so -o must
+# be species-specific for that marker (and the resume check below) to mean
+# anything when $output is reused across many species over time.
+dest="$output/$species"
+mkdir -p "$dest"
+
+log_marker="$dest/${species}_EarlGrey/${species}_EarlGrey.log"
+incomplete_marker="$dest/INCOMPLETE_RUN.txt"
+if [ -f "$log_marker" ] && [ ! -f "$incomplete_marker" ]; then
+	echo "$species — already completed, skipping" >&2
+	exit 0
+fi
 
 # earlGrey doesn't unzip local inputs itself (only s3:// inputs auto-unzip,
 # via the entrypoint) — decompress a .gz genome once to a deterministic,
-# persistent path (keyed by species) inside $output, not a randomly-named
-# temp file. earlGrey resumes a stopped run by checking which output files
-# already exist, and its later stages (e.g. TEstrainer) end up referencing
-# this genome path internally — a random name deleted on exit broke resume
-# entirely, since a rerun got a *different* random name pointing at nothing.
-# Reused as-is if it already exists; never deleted here (it's just another
-# artifact of $output, cleaned up along with everything else if you wipe
-# that species' output directory).
+# persistent path inside $dest, not a randomly-named temp file. earlGrey
+# resumes a stopped run by checking which output files already exist, and
+# its later stages (e.g. TEstrainer) end up referencing this genome path
+# internally — a random name deleted on exit broke resume entirely, since a
+# rerun got a *different* random name pointing at nothing. Reused as-is if
+# it already exists; never deleted here (it's just another artifact of
+# $dest, cleaned up along with everything else if you wipe this species'
+# output directory).
 if [[ "$genome" == *.gz ]]; then
-	decompressed="$output/${species}.genome.fna"
+	decompressed="$dest/${species}.genome.fna"
 	if [ ! -e "$decompressed" ]; then
 		gunzip -c "$genome" >"$decompressed"
 	fi
@@ -129,7 +146,12 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$script_dir/.."
 
 mounts=(-v "$dfam:/opt/conda/envs/earlgrey/share/famdb-3.0.0/Libraries/famdb" -v "$output:$output")
-[ "$genome_dir" = "$output" ] || mounts+=(-v "$genome_dir:$genome_dir")
+# Skip a redundant extra mount if the genome is already under $output (e.g.
+# the decompressed path above, or an original input already living there) —
+# the -v "$output:$output" mount already covers it.
+if [ "$genome_dir" != "$output" ] && [[ "$genome_dir" != "$output"/* ]]; then
+	mounts+=(-v "$genome_dir:$genome_dir")
+fi
 
 docker compose --progress quiet run --rm "${mounts[@]}" \
-	earlgrey -g "$genome" -s "$species" -o "$output" -t "$threads"
+	earlgrey -g "$genome" -s "$species" -o "$dest" -t "$threads"

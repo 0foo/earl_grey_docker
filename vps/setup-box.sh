@@ -33,8 +33,9 @@ if ! command -v tailscale >/dev/null 2>&1; then
 fi
 
 if ! command -v aws >/dev/null 2>&1; then
-	# Needed on the host itself, not just inside the container — run-queue.sh
-	# calls `aws s3 ls` directly to check whether a genome already completed.
+	# Needed on the host itself for the one-time sync of genomes/Dfam data
+	# down to local disk (run-queue.sh/run-earlgrey work off local paths
+	# only — see vps/README.md and earlgrey/README.md).
 	echo "Installing AWS CLI..." >&2
 	apt-get update && apt-get install -y --no-install-recommends unzip
 	curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
@@ -64,6 +65,7 @@ echo "Building earlgrey-insects:latest from $earlgrey_dir (docker compose build)
 echo >&2
 echo "Setup complete." >&2
 echo "  Run 'tailscale up' to join your tailnet (prints a login URL to approve in a browser)." >&2
-echo "  Configure AWS credentials for S3 access (aws configure) if you haven't." >&2
-echo "  Then run the work queue with:" >&2
-echo "    $script_dir/run-queue.sh earlgrey-insects:latest <manifest-slice.tsv> <dfam-s3-uri> <output-s3-prefix> [threads]" >&2
+echo "  Sync genomes/Dfam data down to local disk if you haven't (aws configure, then aws s3 sync)." >&2
+echo "  Configure $earlgrey_dir/bin/run-earlgrey.conf (dfam/output/threads) and" >&2
+echo "  $script_dir/run-queue.conf (manifest slice), then run the work queue with:" >&2
+echo "    $script_dir/run-queue.sh" >&2

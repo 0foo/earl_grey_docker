@@ -3,6 +3,10 @@
 # --dfam/--output/--threads on every invocation — these tend to stay the
 # same across runs, unlike the genome file and species. Any of these can
 # still be overridden with a --flag when you run the script — flags win.
+#
+# ../../vps/run-queue.sh also reads this file (it delegates every genome
+# in its manifest to this script) — it has no --dfam/--output/--threads of
+# its own, so this is the one place those settings live for both.
 
 DFAM=/data/bioinfo/data/dfam_data
 OUTPUT=/data/bioinfo/data/output

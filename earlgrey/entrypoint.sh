@@ -61,6 +61,7 @@ while [ $i -lt ${#args[@]} ]; do
 			mkdir -p "$output_local"
 			new_args+=("-o" "$output_local")
 		else
+			output_local="$val"
 			new_args+=("-o" "$val")
 		fi
 		;;
