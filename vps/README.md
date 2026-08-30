@@ -99,13 +99,4 @@ To go back and retry specifically the genomes that failed on a box, grep its log
 
 ### 6. Optional: live dashboard and file browser
 
-`vps/monitoring/docker-compose.yml` runs two small containers, both reachable only from the tailnet (same reasoning as the SSH/firewall setup above — no extra firewall rule needed, since Tailscale traffic is decrypted internally and the Robot firewall never sees these as connections from outside the tailnet):
-
-```
-docker compose -f ~/earl_grey_docker/vps/monitoring/docker-compose.yml up -d
-```
-
-- **[Glances](https://nicolargo.github.io/glances/)** at `http://<tailscale-ip>:61208` — a live, mobile-friendly view of the box as a whole (and per-container stats while a job is running). Complements `resource-usage.csv` (above), which is per-genome history instead of a live view.
-- **[File Browser](https://github.com/filebrowser/filebrowser)** at `http://<tailscale-ip>:8080` — browse/manage everything under `/data` (genomes, Dfam, output) from a phone or laptop without SSH. First login: `admin` / check `docker logs filebrowser` for the random password it generates on first startup (change it immediately in the UI). It has read-write access to `/data` by default — edit the compose file's `filebrowser` volume to add `:ro` if you only want browsing, not editing/deleting.
-
-Reachable at `http://<tailscale-ip>:19999` from any device on your tailnet — nowhere else, since it binds the host's network interfaces (including `tailscale0`) and the Robot firewall discards any new inbound connection from the public internet (see the firewall setup above). No extra firewall rule needed, same reasoning as SSH: Tailscale traffic is decrypted internally, so the firewall never sees "a connection to port 19999" from outside the tailnet at all.
+See [`monitoring/README.md`](monitoring/README.md).
