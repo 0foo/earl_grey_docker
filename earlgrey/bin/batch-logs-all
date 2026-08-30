@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -lt 1 ]; then
+	echo "Usage: $(basename "$0") <job-id> [output-dir]" >&2
+	echo "  Fetches the complete (untruncated) CloudWatch log for every" >&2
+	echo "  child of an AWS Batch array job submitted by submit-batch, and" >&2
+	echo "  writes each to <output-dir>/<index>-<species>.log. Falls back" >&2
+	echo "  to a single file if job-id isn't an array job." >&2
+	echo "  output-dir defaults to ./batch-logs-<job-id>." >&2
+	echo "Example: $(basename "$0") abcd1234-..." >&2
+	echo "Example: $(basename "$0") abcd1234-... logs/" >&2
+	exit 1
+fi
+
+job_id="$1"
+out_dir="${2:-batch-logs-${job_id}}"
+log_group="/aws/batch/earlgrey"
+
+mkdir -p "$out_dir"
+
+# Species names for nicer filenames — best-effort, falls back to just the
+# index if the manifest can't be found (e.g. this isn't a submit-batch job).
+manifest_local=""
+manifest_s3="$(aws batch describe-jobs --jobs "$job_id" \
+	--query 'jobs[0].container.environment[?name==`MANIFEST_S3_URI`].value | [0]' --output text 2>/dev/null || true)"
+if [ -n "$manifest_s3" ] && [ "$manifest_s3" != "None" ]; then
+	manifest_local="$(mktemp)"
+	trap 'rm -f "$manifest_local"' EXIT
+	aws s3 cp "$manifest_s3" "$manifest_local" --only-show-errors
+fi
+
+species_for_index() {
+	local idx="$1"
+	if [ -n "$manifest_local" ]; then
+		cut -f1 <<<"$(sed -n "$((idx + 1))p" "$manifest_local")"
+	fi
+}
+
+fetch_one() {
+	local target="$1" label="$2"
+	local stream
+	stream="$(aws batch describe-jobs --jobs "$target" --query 'jobs[0].container.logStreamName' --output text)"
+	if [ -z "$stream" ] || [ "$stream" = "None" ]; then
+		echo "  $label: no log stream yet, skipping" >&2
+		return
+	fi
+	echo "  $label: $stream -> $out_dir/$label.log" >&2
+	aws logs filter-log-events --log-group-name "$log_group" --log-stream-names "$stream" \
+		--output text --query 'events[].message' >"$out_dir/$label.log"
+}
+
+children="$(aws batch list-jobs --array-job-id "$job_id" --query 'jobSummaryList[].arrayProperties.index' --output text)"
+
+if [ -z "$children" ]; then
+	echo "Not an array job — fetching single log for $job_id" >&2
+	fetch_one "$job_id" "$job_id"
+else
+	echo "Fetching logs for $(wc -w <<<"$children" | tr -d ' ') child job(s) of $job_id into $out_dir/" >&2
+	for idx in $(tr '\t' '\n' <<<"$children" | sort -n); do
+		species="$(species_for_index "$idx")"
+		label="${idx}${species:+-$species}"
+		fetch_one "${job_id}:${idx}" "$label"
+	done
+fi
+
+echo "Done." >&2

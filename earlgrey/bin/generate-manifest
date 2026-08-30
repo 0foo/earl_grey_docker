@@ -30,7 +30,9 @@ aws s3 ls --recursive "$prefix" | awk '{print $4}' | while read -r key; do
 	*) continue ;;
 	esac
 	base="$(basename "$key")"
-	species="$(sed -E 's/\.(fna|fa|fasta)(\.gz)?$//' <<<"$base" | tr -c 'A-Za-z0-9' '_' | tr 'A-Z' 'a-z')"
+	# printf, not <<<"$base" — a here-string appends a trailing newline that
+	# tr -c would otherwise convert into a spurious trailing underscore.
+	species="$(printf '%s' "$base" | sed -E 's/\.(fna|fa|fasta)(\.gz)?$//' | tr -c 'A-Za-z0-9' '_' | tr 'A-Z' 'a-z')"
 	echo -e "${species}\ts3://${bucket}/${key}"
 done | sort -u >"$tmp"
 

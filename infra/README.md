@@ -154,6 +154,12 @@ Adjust batch size freely — smaller if you want tighter control, larger once yo
   earlgrey/bin/batch-logs abcd1234-...          # plain (non-array) job
   earlgrey/bin/batch-logs abcd1234-... 3        # array child 3
   earlgrey/bin/batch-logs abcd1234-... 3 4h     # last 4h instead of the 1h default
+  earlgrey/bin/batch-logs abcd1234-... 3 all    # full log, no time window
+  ```
+* `earlgrey/bin/batch-logs-all <job-id> [output-dir]` — fetches the complete log for every child of an array job (or the single job, if it's not an array job) in one shot, one file per genome under `output-dir` (default `./batch-logs-<job-id>/`), named `<index>-<species>.log` where the manifest is available.
+  ```
+  earlgrey/bin/batch-logs-all abcd1234-...
+  earlgrey/bin/batch-logs-all abcd1234-... logs/
   ```
 * `earlgrey/bin/batch-failures <array-job-id> [retry-manifest.tsv]` — lists every failed child with its reason (OOM, Spot loss, or anything else) and writes a manifest of just those genomes, so a retry is one `submit-batch` call away instead of manually cross-referencing array indices against the manifest.
 * AWS Batch console → Jobs, or `aws batch list-jobs --job-queue <JobQueueName>` — see everything queued/running/failed.

@@ -25,7 +25,7 @@ if [ -n "${DFAM_S3_URI:-}" ]; then
 		flock -x 200
 		if [ ! -e "$dfam_path/.cache-complete" ]; then
 			echo "Caching Dfam data from $DFAM_S3_URI to $dfam_path ..." >&2
-			aws s3 sync "$DFAM_S3_URI" "$dfam_path"
+			aws s3 sync --no-progress "$DFAM_S3_URI" "$dfam_path"
 			touch "$dfam_path/.cache-complete"
 		fi
 	) 200>"$dfam_path/.download.lock"
@@ -43,7 +43,7 @@ if [ -n "${MANIFEST_S3_URI:-}" ]; then
 	if [ "$has_g" -eq 0 ]; then
 		index="${AWS_BATCH_JOB_ARRAY_INDEX:-0}"
 		manifest_local="/tmp/earlgrey-manifest.tsv"
-		aws s3 cp "$MANIFEST_S3_URI" "$manifest_local"
+		aws s3 cp --no-progress "$MANIFEST_S3_URI" "$manifest_local"
 		line="$(sed -n "$((index + 1))p" "$manifest_local")"
 		if [ -z "$line" ]; then
 			echo "No manifest line at index $index in $MANIFEST_S3_URI" >&2
@@ -78,7 +78,7 @@ while [ $i -lt ${#args[@]} ]; do
 		if [[ "$val" == s3://* ]]; then
 			mkdir -p /tmp/earlgrey-input
 			genome_local="/tmp/earlgrey-input/$(basename "$val")"
-			aws s3 cp "$val" "$genome_local"
+			aws s3 cp --no-progress "$val" "$genome_local"
 			if [[ "$genome_local" == *.gz ]]; then
 				gunzip -f "$genome_local"
 				genome_local="${genome_local%.gz}"
@@ -110,8 +110,25 @@ done
 status=0
 conda run --no-capture-output -n earlgrey earlGrey "${new_args[@]}" || status=$?
 
+# A Spot interruption, OOM-kill, or timeout all surface here as a non-zero
+# exit rather than the container being torn down before this point runs —
+# flag it clearly, in the log AND in the synced output itself, so a partial
+# result never gets mistaken for a live/still-running or silently-broken
+# run later.
+if [ "$status" -ne 0 ]; then
+	echo "=== earlGrey exited with status $status — did NOT complete successfully. Any output below is PARTIAL. Common causes: Spot Instance interruption, an out-of-memory kill, or the job's timeout being reached. ===" >&2
+	if [ -n "$output_local" ] && [ -d "$output_local" ]; then
+		{
+			echo "INCOMPLETE RUN"
+			echo "earlGrey exited with status $status before finishing — this output is partial, not a completed result."
+			echo "Common causes: a Spot Instance interruption, an out-of-memory kill, or the job hitting its timeout."
+			echo "Terminated at: $(date -u +%FT%TZ)"
+		} >"$output_local/INCOMPLETE_RUN.txt" 2>/dev/null || true
+	fi
+fi
+
 if [ -n "$output_s3" ]; then
-	aws s3 sync "$output_local" "$output_s3"
+	aws s3 sync --no-progress "$output_local" "$output_s3"
 fi
 
 exit "$status"

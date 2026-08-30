@@ -34,8 +34,10 @@ fi
 
 echo "=== $log_group : $stream ===" >&2
 if [ "$since" = "all" ]; then
-	aws logs get-log-events --log-group-name "$log_group" --log-stream-name "$stream" \
-		--start-from-head --output text --query 'events[].message'
+	# filter-log-events (unlike get-log-events) is auto-paginated by the AWS
+	# CLI, so this returns the complete stream regardless of size.
+	aws logs filter-log-events --log-group-name "$log_group" --log-stream-names "$stream" \
+		--output text --query 'events[].message'
 else
 	aws logs tail "$log_group" --log-stream-names "$stream" --since "$since"
 fi
