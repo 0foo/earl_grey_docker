@@ -1,0 +1,13 @@
+# Copy to run-queue.conf (in the directory you run run-queue.sh from, or
+# point at this file with --config <path>) to avoid retyping the same
+# --image/--dfam/--output/--threads on every invocation. Any of these can
+# still be overridden with a --flag when you run the script — flags win.
+
+IMAGE=earlgrey-insects:latest
+
+# Either an s3:// URI or a local path — see vps/README.md for both forms.
+DFAM=/data/dfam_data
+OUTPUT=/data/output
+
+# Sized for 64GB RAM at ~12GB/thread with headroom — see vps/README.md.
+THREADS=4

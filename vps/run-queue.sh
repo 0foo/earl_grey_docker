@@ -1,8 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ $# -lt 4 ]; then
-	echo "Usage: $(basename "$0") <image> <manifest-slice.tsv> <dfam-path-or-s3-uri> <output-path-or-s3-prefix> [threads]" >&2
+print_usage() {
+	echo "Usage: $(basename "$0") <manifest-slice.tsv> [options]" >&2
+	echo "  Settings can come from --flags, a config file, or both (flags win" >&2
+	echo "  over the config file for anything set in both):" >&2
+	echo "    --config <path>   Config file (default: ./run-queue.conf if it" >&2
+	echo "                      exists — see vps/run-queue.conf.example)." >&2
+	echo "    --image <image>   Docker image to run. Required (flag or config)." >&2
+	echo "    --dfam <path>     Dfam path or s3:// URI. Required (flag or config)." >&2
+	echo "    --output <path>   Output path or s3:// prefix. Required (flag or config)." >&2
+	echo "    --threads <n>     Threads per job. Default: 4." >&2
+	echo >&2
 	echo "  Works sequentially through every '<species>\\t<genome-path-or-uri>'" >&2
 	echo "  line in the manifest slice: skips a species whose output already" >&2
 	echo "  completed successfully (resume-safe across restarts — detected by" >&2
@@ -18,18 +27,91 @@ if [ $# -lt 4 ]; then
 	echo "  headroom, since a single RepeatModeler worker has been observed" >&2
 	echo "  spiking to ~60GB RSS by itself; the setup script's swap file is" >&2
 	echo "  the backstop if that headroom isn't enough." >&2
-	echo "Example (S3): $(basename "$0") earlgrey-insects:latest \\" >&2
-	echo "    manifest-01.tsv s3://my-bucket/dfam_data s3://my-bucket/output" >&2
-	echo "Example (local): $(basename "$0") earlgrey-insects:latest \\" >&2
-	echo "    manifest-01.tsv /data/dfam_data /data/output" >&2
+	echo "Example (config file supplies everything): $(basename "$0") manifest-01.tsv" >&2
+	echo "Example (all flags): $(basename "$0") manifest-01.tsv --image earlgrey-insects:latest \\" >&2
+	echo "    --dfam /data/dfam_data --output /data/output --threads 4" >&2
+}
+
+if [ $# -lt 1 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+	print_usage
 	exit 1
 fi
 
-image="$1"
-manifest="$2"
-dfam="$3"
-output_prefix="${4%/}"
-threads="${5:-4}"
+manifest="$1"
+shift
+
+config=""
+image=""
+dfam=""
+output_prefix=""
+threads=""
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--config)
+		config="$2"
+		shift 2
+		;;
+	--image)
+		image="$2"
+		shift 2
+		;;
+	--dfam)
+		dfam="$2"
+		shift 2
+		;;
+	--output)
+		output_prefix="$2"
+		shift 2
+		;;
+	--threads)
+		threads="$2"
+		shift 2
+		;;
+	*)
+		echo "Unknown option: $1" >&2
+		print_usage
+		exit 1
+		;;
+	esac
+done
+
+if [ -z "$config" ] && [ -f "./run-queue.conf" ]; then
+	config="./run-queue.conf"
+fi
+
+if [ -n "$config" ]; then
+	if [ ! -f "$config" ]; then
+		echo "Config file not found: $config" >&2
+		exit 1
+	fi
+	# Config sets IMAGE/DFAM/OUTPUT/THREADS (distinct names from this
+	# script's own image/dfam/output_prefix/threads) so a --flag already
+	# set from the command line is never clobbered by sourcing this file.
+	# shellcheck disable=SC1090
+	source "$config"
+	if [ -z "$image" ]; then
+		image="${IMAGE:-}"
+	fi
+	if [ -z "$dfam" ]; then
+		dfam="${DFAM:-}"
+	fi
+	if [ -z "$output_prefix" ]; then
+		output_prefix="${OUTPUT:-}"
+	fi
+	if [ -z "$threads" ]; then
+		threads="${THREADS:-}"
+	fi
+fi
+
+threads="${threads:-4}"
+
+if [ -z "$image" ] || [ -z "$dfam" ] || [ -z "$output_prefix" ]; then
+	echo "Missing --image/--dfam/--output — supply each via a flag or a config file (see --help)." >&2
+	exit 1
+fi
+
+output_prefix="${output_prefix%/}"
 
 dfam_is_s3=0
 if [[ "$dfam" == s3://* ]]; then

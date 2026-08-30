@@ -52,23 +52,34 @@ tailscale up   # follow the printed login URL to approve this box in a browser
 
 ### 4. Run the queue
 
-This runs for days/weeks unattended — use `tmux`/`screen`/`nohup` so it survives your SSH session ending. `dfam` and `output-prefix` (args 3 and 4) can each independently be `s3://` or local — the genome path in the manifest's 2nd column can be either too, whatever `generate-manifest` produced:
+This runs for days/weeks unattended — use `tmux`/`screen`/`nohup` so it survives your SSH session ending. Only the manifest slice is a positional arg; everything else (`--image`/`--dfam`/`--output`/`--threads`) can come from **flags, a config file, or both** — flags win over the config file for anything set in both. `--dfam`/`--output` can each independently be `s3://` or local, same as the genome path in the manifest's 2nd column:
 
 ```
-# S3 (needs AWS credentials configured first):
-aws configure   # paste the earlgrey-vps access key/secret, set a default region
-tmux new -s earlgrey
-~/earl_grey_docker/vps/run-queue.sh earlgrey-insects:latest \
-  manifest-0N.tsv s3://my-bioinfo-refdata-2026/dfam_data s3://my-bioinfo-refdata-2026/output 4
+# Config file once per box (copy the example, then edit):
+cp vps/run-queue.conf.example run-queue.conf
+$EDITOR run-queue.conf   # set IMAGE/DFAM/OUTPUT/THREADS
 
-# Local (no AWS credentials needed at all):
+# S3 needs AWS credentials configured first:
+aws configure   # paste the earlgrey-vps access key/secret, set a default region
+
 tmux new -s earlgrey
-~/earl_grey_docker/vps/run-queue.sh earlgrey-insects:latest \
-  manifest-0N.tsv /data/dfam_data /data/output 4
+~/earl_grey_docker/vps/run-queue.sh manifest-0N.tsv
 # Ctrl-B D to detach; tmux attach -t earlgrey to check back in
 ```
 
-`threads` (last arg, default 4) is sized for 64GB RAM at ~12GB/thread with headroom: earlGrey's RepeatModeler/RepeatMasker stack runs ~10-12GB RAM per thread, and a single worker has been observed spiking to ~60GB RSS on its own — 4 threads leaves real margin against that on a 64GB box, backstopped by the swap file `setup-box.sh` creates. Adjust down if a box has less RAM, or up cautiously if you've confirmed headroom on yours.
+Or skip the config file and pass everything as flags (also how to override just one setting from an otherwise-used config file, e.g. `--threads 8`):
+
+```
+~/earl_grey_docker/vps/run-queue.sh manifest-0N.tsv --image earlgrey-insects:latest \
+  --dfam s3://my-bioinfo-refdata-2026/dfam_data --output s3://my-bioinfo-refdata-2026/output --threads 4
+
+~/earl_grey_docker/vps/run-queue.sh manifest-0N.tsv --image earlgrey-insects:latest \
+  --dfam /data/dfam_data --output /data/output --threads 4
+```
+
+`--config <path>` points at a specific config file instead of the default (`./run-queue.conf` in the directory you run the script from, if it exists).
+
+`threads` (default 4) is sized for 64GB RAM at ~12GB/thread with headroom: earlGrey's RepeatModeler/RepeatMasker stack runs ~10-12GB RAM per thread, and a single worker has been observed spiking to ~60GB RSS on its own — 4 threads leaves real margin against that on a 64GB box, backstopped by the swap file `setup-box.sh` creates. Adjust down if a box has less RAM, or up cautiously if you've confirmed headroom on yours.
 
 For `s3://` Dfam, it's downloaded once into `/root/dfam-cache` (host-mounted into every container run) and reused for every genome on that box — **not** re-downloaded per genome, which would otherwise mean 40+ redundant ~35GB downloads per box and real S3 egress cost (this transfer is a genuine cross-internet download from S3, not free intra-AWS traffic). A local Dfam path is just bind-mounted read-only instead — no download step at all.
 
