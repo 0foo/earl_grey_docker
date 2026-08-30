@@ -2,39 +2,58 @@
 set -euo pipefail
 
 if [ $# -lt 1 ]; then
-	echo "Usage: $(basename "$0") <genomes-s3-prefix> [manifest-output-path]" >&2
-	echo "  Lists .fna/.fa/.fasta (optionally .gz) files under the given s3://" >&2
-	echo "  prefix and writes a tab-separated '<species>\\t<genome-s3-uri>'" >&2
-	echo "  manifest, one line per genome, sorted by species. Species is" >&2
-	echo "  derived from the filename (extension stripped, non-alphanumerics" >&2
-	echo "  collapsed to '_', lowercased) — review the output and edit any" >&2
-	echo "  names before submitting." >&2
+	echo "Usage: $(basename "$0") <genomes-s3-prefix-or-local-dir> [manifest-output-path]" >&2
+	echo "  Lists .fna/.fa/.fasta (optionally .gz) files under the given" >&2
+	echo "  s3:// prefix OR local directory, and writes a tab-separated" >&2
+	echo "  '<species>\\t<genome-path-or-uri>' manifest, one line per genome," >&2
+	echo "  sorted by species. Species is derived from the filename (extension" >&2
+	echo "  and a trailing .rm segment stripped, non-alphanumerics collapsed" >&2
+	echo "  to '_', lowercased) — review the output and edit any names before" >&2
+	echo "  submitting." >&2
 	echo "Example: $(basename "$0") s3://my-bucket/genomes/ manifest.tsv" >&2
+	echo "Example: $(basename "$0") /data/genomes/2_unmasked_datasets manifest.tsv" >&2
 	exit 1
 fi
 
 prefix="$1"
-[[ "$prefix" == s3://* ]] || {
-	echo "genomes prefix must be an s3:// URI" >&2
-	exit 1
-}
 out="${2:-manifest.tsv}"
-bucket="$(sed -E 's#^s3://([^/]+)/?.*#\1#' <<<"$prefix")"
 
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 
-aws s3 ls --recursive "$prefix" | awk '{print $4}' | while read -r key; do
-	case "$key" in
-	*.fna | *.fa | *.fasta | *.fna.gz | *.fa.gz | *.fasta.gz) ;;
-	*) continue ;;
-	esac
-	base="$(basename "$key")"
-	# printf, not <<<"$base" — a here-string appends a trailing newline that
-	# tr -c would otherwise convert into a spurious trailing underscore.
-	species="$(printf '%s' "$base" | sed -E 's/\.(fna|fa|fasta)(\.gz)?$//' | tr -c 'A-Za-z0-9' '_' | tr 'A-Z' 'a-z')"
-	echo -e "${species}\ts3://${bucket}/${key}"
-done | sort -u >"$tmp"
+if [[ "$prefix" == s3://* ]]; then
+	bucket="$(sed -E 's#^s3://([^/]+)/?.*#\1#' <<<"$prefix")"
+	aws s3 ls --recursive "$prefix" | awk '{print $4}' | while read -r key; do
+		case "$key" in
+		*.fna | *.fa | *.fasta | *.fna.gz | *.fa.gz | *.fasta.gz) ;;
+		*) continue ;;
+		esac
+		base="$(basename "$key")"
+		# printf, not <<<"$base" — a here-string appends a trailing newline
+		# that tr -c would otherwise convert into a spurious trailing
+		# underscore. (\.rm)? strips a trailing ".rm" segment too (e.g.
+		# "Species.nanopore.rm.fna.gz" -> "species_nanopore", not
+		# "..._nanopore_rm") — it's a naming-convention artifact in this
+		# dataset, not disambiguating information.
+		species="$(printf '%s' "$base" | sed -E 's/(\.rm)?\.(fna|fa|fasta)(\.gz)?$//I' | tr -c 'A-Za-z0-9' '_' | tr 'A-Z' 'a-z')"
+		echo -e "${species}\ts3://${bucket}/${key}"
+	done | sort -u >"$tmp"
+else
+	if [ ! -d "$prefix" ]; then
+		echo "genomes path must be an s3:// URI or an existing local directory" >&2
+		exit 1
+	fi
+	prefix="$(realpath "$prefix")"
+	find "$prefix" -type f | while read -r filepath; do
+		case "$filepath" in
+		*.fna | *.fa | *.fasta | *.fna.gz | *.fa.gz | *.fasta.gz) ;;
+		*) continue ;;
+		esac
+		base="$(basename "$filepath")"
+		species="$(printf '%s' "$base" | sed -E 's/(\.rm)?\.(fna|fa|fasta)(\.gz)?$//I' | tr -c 'A-Za-z0-9' '_' | tr 'A-Z' 'a-z')"
+		echo -e "${species}\t${filepath}"
+	done | sort -u >"$tmp"
+fi
 
 if [ ! -s "$tmp" ]; then
 	echo "No genome files found under $prefix" >&2

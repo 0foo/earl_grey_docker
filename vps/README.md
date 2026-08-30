@@ -2,9 +2,11 @@
 
 Cheap 64GB-RAM dedicated servers (e.g. Hetzner's Server Auction) can run the 200-genome earlGrey workload for a fraction of what cloud compute costs, at the cost of doing the orchestration yourself: no managed job queue, no auto-retry, no auto-scaling, no dashboard. Each box just works sequentially through its own fixed slice of the genome manifest.
 
-Same image, same `entrypoint.sh`, unchanged — its `-g`/`-o` S3 handling and `DFAM_S3_URI` per-host caching already work standalone with no modification (S3 remains the shared data store for genomes/Dfam/output regardless of where the compute runs). The only new pieces here are the per-box setup and the work-queue loop.
+Same image, same `entrypoint.sh`, unchanged — its `-g`/`-o` S3 handling and `DFAM_S3_URI` per-host caching already work standalone with no modification. `generate-manifest` and `run-queue.sh` both accept **either** `s3://` URIs or local paths for genomes/Dfam/output, independently — so if you've synced the bucket down to a local directory (e.g. `/data`) on the box, you can run entirely off local disk with no S3 calls at all, or mix (e.g. local Dfam, S3 output) if that suits your setup better. The examples below show both.
 
 ### 1. Create an IAM user for these boxes
+
+Skip this step entirely if you're running fully local (local genomes, local Dfam, local output) — nothing below needs AWS credentials in that case.
 
 These boxes aren't AWS-hosted, so there's no instance role to lean on — they need an IAM **user** with an access key instead, scoped to just S3 read/write on the data bucket (the image is built locally on each box, so there's no ECR/container-registry permission needed at all):
 
@@ -24,9 +26,12 @@ Save that access key/secret — you'll run `aws configure` with it on every box.
 
 ### 2. Partition the manifest
 
-No runtime coordination between boxes — each one just gets a fixed, non-overlapping slice up front:
+No runtime coordination between boxes — each one just gets a fixed, non-overlapping slice up front. Build `manifest.tsv` from wherever your genomes actually are — `bin/generate-manifest` accepts either an `s3://` prefix or a local directory:
 
 ```
+earlgrey/bin/generate-manifest s3://my-bioinfo-refdata-2026/genomes/2_unmasked_datasets/ manifest.tsv   # S3
+earlgrey/bin/generate-manifest /data/genomes/2_unmasked_datasets manifest.tsv                            # local
+
 vps/partition-manifest manifest.tsv 5
 # -> manifest-01.tsv .. manifest-05.tsv, one per box
 ```
@@ -47,20 +52,25 @@ tailscale up   # follow the printed login URL to approve this box in a browser
 
 ### 4. Run the queue
 
-This runs for days/weeks unattended — use `tmux`/`screen`/`nohup` so it survives your SSH session ending:
+This runs for days/weeks unattended — use `tmux`/`screen`/`nohup` so it survives your SSH session ending. `dfam` and `output-prefix` (args 3 and 4) can each independently be `s3://` or local — the genome path in the manifest's 2nd column can be either too, whatever `generate-manifest` produced:
 
 ```
+# S3 (needs AWS credentials configured first):
 aws configure   # paste the earlgrey-vps access key/secret, set a default region
-
 tmux new -s earlgrey
 ~/earl_grey_docker/vps/run-queue.sh earlgrey-insects:latest \
   manifest-0N.tsv s3://my-bioinfo-refdata-2026/dfam_data s3://my-bioinfo-refdata-2026/output 4
+
+# Local (no AWS credentials needed at all):
+tmux new -s earlgrey
+~/earl_grey_docker/vps/run-queue.sh earlgrey-insects:latest \
+  manifest-0N.tsv /data/dfam_data /data/output 4
 # Ctrl-B D to detach; tmux attach -t earlgrey to check back in
 ```
 
 `threads` (last arg, default 4) is sized for 64GB RAM at ~12GB/thread with headroom: earlGrey's RepeatModeler/RepeatMasker stack runs ~10-12GB RAM per thread, and a single worker has been observed spiking to ~60GB RSS on its own — 4 threads leaves real margin against that on a 64GB box, backstopped by the swap file `setup-box.sh` creates. Adjust down if a box has less RAM, or up cautiously if you've confirmed headroom on yours.
 
-Dfam is downloaded once into `/root/dfam-cache` (host-mounted into every container run) and reused for every genome on that box — **not** re-downloaded per genome, which would otherwise mean 40+ redundant ~35GB downloads per box and real S3 egress cost (unlike AWS Batch, this transfer is a genuine cross-internet download from S3, not free intra-AWS traffic).
+For `s3://` Dfam, it's downloaded once into `/root/dfam-cache` (host-mounted into every container run) and reused for every genome on that box — **not** re-downloaded per genome, which would otherwise mean 40+ redundant ~35GB downloads per box and real S3 egress cost (this transfer is a genuine cross-internet download from S3, not free intra-AWS traffic). A local Dfam path is just bind-mounted read-only instead — no download step at all.
 
 ### 5. Monitor and handle failures
 
@@ -68,9 +78,13 @@ No dashboard here — check in manually:
 
 ```
 tail -f queue-manifest-0N.log     # live progress on that box
+
+# S3 output:
 aws s3 ls s3://my-bioinfo-refdata-2026/output/ --recursive | grep EarlGrey.log   # what's actually finished
+# local output:
+find /data/output -name '*_EarlGrey.log'
 ```
 
-A failed genome is logged and the queue moves on — it doesn't stop the box. Resume behavior is automatic and safe: rerunning `run-queue.sh` on the same manifest slice skips any species whose output already completed successfully (an `EarlGrey.log` exists in S3 with no `INCOMPLETE_RUN.txt` marker — the same marker `entrypoint.sh` writes on any non-zero exit) and retries anything that's missing or was left incomplete. So if a box reboots or the queue script dies, just restart it with the same command.
+A failed genome is logged and the queue moves on — it doesn't stop the box. Resume behavior is automatic and safe: rerunning `run-queue.sh` on the same manifest slice skips any species whose output already completed successfully (an `EarlGrey.log` exists with no `INCOMPLETE_RUN.txt` marker next to it — the same marker `entrypoint.sh` writes on any non-zero exit) and retries anything that's missing or was left incomplete. So if a box reboots or the queue script dies, just restart it with the same command.
 
 To go back and retry specifically the genomes that failed on a box, grep its log for `FAILED` and build a small manifest of just those lines, then rerun `run-queue.sh` against that instead of the full slice.
