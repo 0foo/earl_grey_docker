@@ -157,7 +157,7 @@ fi
 # its output — host-level (not per-container), which is accurate as long as
 # this is the only job running on the box (the normal case: run-queue.sh
 # runs one genome at a time).
-"$script_dir/monitor-resources.sh" "$dest/resource-usage.csv" 1 &
+"$script_dir/monitor-resources.sh" "$dest/resource-usage.csv" 10 &
 monitor_pid=$!
 trap 'kill "$monitor_pid" 2>/dev/null || true' EXIT
 
