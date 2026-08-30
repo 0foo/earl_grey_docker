@@ -46,8 +46,13 @@ fetch_one() {
 		return
 	fi
 	echo "  $label: $stream -> $out_dir/$label.log" >&2
+	# events[].[message] (bracketed), not events[].message (bare) — a bare
+	# scalar list gets tab-joined onto ONE line by --output text, which
+	# silently destroyed line breaks in the captured log. Bracketing each
+	# message makes it a one-field "row", which --output text renders one
+	# per line instead.
 	aws logs filter-log-events --log-group-name "$log_group" --log-stream-names "$stream" \
-		--output text --query 'events[].message' >"$out_dir/$label.log"
+		--output text --query 'events[].[message]' >"$out_dir/$label.log"
 }
 
 children="$(aws batch list-jobs --array-job-id "$job_id" --query 'jobSummaryList[].arrayProperties.index' --output text)"
