@@ -14,8 +14,11 @@ print_usage() {
 	echo "    --threads <n>     Threads to use. Default: 4." >&2
 	echo "  Skips this species if its output already completed successfully" >&2
 	echo "  (resume-safe across restarts — detected by an EarlGrey log" >&2
-	echo "  existing with no INCOMPLETE_RUN.txt marker next to it, the same" >&2
-	echo "  marker entrypoint.sh writes on any non-zero exit)." >&2
+	echo "  existing with no INCOMPLETE_RUN.txt marker next to it. This" >&2
+	echo "  script writes that marker itself before every run starts and" >&2
+	echo "  only clears it after a confirmed zero exit, so even a hard kill" >&2
+	echo "  (docker kill, OOM, double Ctrl+C) leaves the run flagged" >&2
+	echo "  incomplete instead of being mistaken for a completed one." >&2
 	echo "Example (config file supplies dfam/output/threads):" >&2
 	echo "  $(basename "$0") genome.fna.gz dmel" >&2
 	echo "Example (all flags): $(basename "$0") genome.fna.gz dmel \\" >&2
@@ -161,5 +164,28 @@ fi
 monitor_pid=$!
 trap 'kill "$monitor_pid" 2>/dev/null || true' EXIT
 
+# Written up front, before the container even starts, and only removed
+# below on a confirmed zero exit. entrypoint.sh also writes this marker
+# itself when it catches a non-zero exit from earlGrey, but that only
+# covers a graceful failure — a hard kill (docker kill, OOM, double
+# Ctrl+C) can take the whole container down before entrypoint.sh gets to
+# run that logic. Pre-writing it here means the resume check above is
+# never fooled by that case: it's already marked incomplete before the
+# run does anything, and success is the only thing that clears it.
+{
+	echo "RUN IN PROGRESS"
+	echo "Started at: $(date -u +%FT%TZ)"
+	echo "If this file is still here after the run ends, it was interrupted before finishing."
+} >"$incomplete_marker"
+
+set +e
 docker compose --progress quiet run --rm "${mounts[@]}" \
 	earlgrey -g "$genome" -s "$species" -o "$dest" -t "$threads"
+status=$?
+set -e
+
+if [ "$status" -eq 0 ]; then
+	rm -f "$incomplete_marker"
+else
+	exit "$status"
+fi
