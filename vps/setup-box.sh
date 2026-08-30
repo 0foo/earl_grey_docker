@@ -1,25 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ $# -lt 1 ]; then
-	echo "Usage: $(basename "$0") <repo-path> [image-tag] [swap-size-gib]" >&2
-	echo "  One-time setup for a dedicated/VPS box, assuming the repo is" >&2
-	echo "  already cloned at <repo-path>: installs Docker and Tailscale if" >&2
-	echo "  missing, creates a swap file (default 96GiB — a single" >&2
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+	echo "Usage: $(basename "$0") [swap-size-gib]" >&2
+	echo "  One-time setup for a dedicated/VPS box, run from within the" >&2
+	echo "  cloned repo (as vps/setup-box.sh): installs Docker and Tailscale" >&2
+	echo "  if missing, creates a swap file (default 96GiB — a single" >&2
 	echo "  RepeatModeler worker has been observed spiking to ~60GB RSS by" >&2
 	echo "  itself) if not already present, and builds the earlgrey image" >&2
-	echo "  from <repo-path>/earlgrey." >&2
+	echo "  from ../earlgrey relative to this script, tagged 'latest'." >&2
 	echo "  Run 'tailscale up' afterward — it prints a login URL to approve" >&2
 	echo "  in a browser, joining this box to your tailnet." >&2
 	echo "  Run as root (the default login on a freshly-installed Hetzner" >&2
 	echo "  dedicated server)." >&2
-	echo "Example: $(basename "$0") ~/earl_grey_docker 7.3.1" >&2
+	echo "Example: $(basename "$0")" >&2
 	exit 1
 fi
 
-repo_path="$1"
-image_tag="${2:-7.3.1}"
-swap_gib="${3:-96}"
+swap_gib="${1:-96}"
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+earlgrey_dir="$script_dir/../earlgrey"
 
 if ! command -v docker >/dev/null 2>&1; then
 	echo "Installing Docker..." >&2
@@ -46,12 +47,12 @@ fi
 
 mkdir -p /root/dfam-cache
 
-echo "Building earlgrey-insects:${image_tag} from ${repo_path}/earlgrey..." >&2
-docker build -t "earlgrey-insects:${image_tag}" "${repo_path}/earlgrey"
+echo "Building earlgrey-insects:latest from $earlgrey_dir (docker compose build)..." >&2
+(cd "$earlgrey_dir" && docker compose build)
 
 echo >&2
 echo "Setup complete." >&2
 echo "  Run 'tailscale up' to join your tailnet (prints a login URL to approve in a browser)." >&2
 echo "  Configure AWS credentials for S3 access (aws configure) if you haven't." >&2
 echo "  Then run the work queue with:" >&2
-echo "    ${repo_path}/vps/run-queue.sh earlgrey-insects:${image_tag} <manifest-slice.tsv> <dfam-s3-uri> <output-s3-prefix> [threads]" >&2
+echo "    $script_dir/run-queue.sh earlgrey-insects:latest <manifest-slice.tsv> <dfam-s3-uri> <output-s3-prefix> [threads]" >&2

@@ -39,11 +39,11 @@ Provision the box, clone this repo onto it, then per box copy over just this box
 scp manifest-0N.tsv root@<box-ip>:~
 ssh root@<box-ip>
 
-~/earl_grey_docker/vps/setup-box.sh ~/earl_grey_docker 7.3.1
+~/earl_grey_docker/vps/setup-box.sh
 tailscale up   # follow the printed login URL to approve this box in a browser
 ```
 
-`setup-box.sh` installs Docker and Tailscale if missing, creates a **96GiB swap file** (same OOM safety net as the AWS side — a single RepeatModeler worker has been observed spiking to ~60GB RSS by itself, and 2TB of disk makes this cheap insurance), and builds the image locally from the repo checkout you pass it — no AWS/ECR dependency for the image itself. `tailscale up` is a separate manual step since it's interactive (no auth key involved) — once joined, SSH into the box by its tailnet name/IP instead of its public one if you'd rather not expose SSH publicly.
+`setup-box.sh` installs Docker and Tailscale if missing, creates a **96GiB swap file** (same OOM safety net as the AWS side — a single RepeatModeler worker has been observed spiking to ~60GB RSS by itself, and 2TB of disk makes this cheap insurance), and builds the image locally as `earlgrey-insects:latest` from `../earlgrey` relative to the script — no path or tag to pass, no AWS/ECR dependency for the image itself. `tailscale up` is a separate manual step since it's interactive (no auth key involved) — once joined, SSH into the box by its tailnet name/IP instead of its public one if you'd rather not expose SSH publicly.
 
 ### 4. Run the queue
 
@@ -53,7 +53,7 @@ This runs for days/weeks unattended — use `tmux`/`screen`/`nohup` so it surviv
 aws configure   # paste the earlgrey-vps access key/secret, set a default region
 
 tmux new -s earlgrey
-~/earl_grey_docker/vps/run-queue.sh earlgrey-insects:7.3.1 \
+~/earl_grey_docker/vps/run-queue.sh earlgrey-insects:latest \
   manifest-0N.tsv s3://my-bioinfo-refdata-2026/dfam_data s3://my-bioinfo-refdata-2026/output 4
 # Ctrl-B D to detach; tmux attach -t earlgrey to check back in
 ```

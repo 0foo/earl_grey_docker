@@ -1,6 +1,6 @@
 ## What's here
 
-* `Dockerfile` — builds `earlgrey-insects:7.3.1` (Earl Grey 7.3.1 + Python 3.11 + awscli).
+* `Dockerfile` — builds `earlgrey-insects:latest` (Earl Grey 7.3.1 + Python 3.11 + awscli).
 * `entrypoint.sh` — wraps `earlGrey` so `-g`/`-o` accept local paths or `s3://` URIs, for local runs and the [`../vps/`](../vps/README.md) work-queue.
 * `docker-compose.yml` — builds the image. No fixed data mount — mounts are added per invocation (see below).
 * `bin/run-earlgrey` — runs earlGrey from plain host paths (genome file, Dfam dir, output dir), no config needed.

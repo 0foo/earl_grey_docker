@@ -19,7 +19,7 @@ RUN mamba create -n earlgrey -y -c conda-forge -c bioconda earlgrey=7.3.1 python
     mamba clean -a -y
 
 # awscli in the base env (on PATH without activation) so the entrypoint can
-# move genome input/output to/from S3 when running on AWS Batch
+# move genome/Dfam/output to/from S3 (see vps/ for the multi-machine setup)
 RUN mamba install -n base -y -c conda-forge awscli && \
     mamba clean -a -y
 
@@ -37,8 +37,7 @@ RUN conda run --no-capture-output -n earlgrey earlGrey || true
 WORKDIR /genomes
 
 # Wraps `conda run -n earlgrey earlGrey`, transparently handling s3:// URIs
-# for -g/-o (AWS Batch) alongside plain local paths (local testing) — see
-# entrypoint.sh
+# for -g/-o alongside plain local paths (local testing) — see entrypoint.sh
 COPY entrypoint.sh /opt/earlgrey/entrypoint.sh
 RUN chmod +x /opt/earlgrey/entrypoint.sh
 ENTRYPOINT ["/opt/earlgrey/entrypoint.sh"]
@@ -46,8 +45,8 @@ ENTRYPOINT ["/opt/earlgrey/entrypoint.sh"]
 
 
 # Build the Docker image with the following command (run from this
-# directory, docker/earlgrey/):
-# docker build -t earlgrey-insects:7.3.1 .
+# directory, docker/earlgrey/), or just `docker compose build`:
+# docker build -t earlgrey-insects:latest .
 #
 # Run locally with dfam_data bind-mounted and a local genome file (path is
 # absolute, so this works from anywhere; adjust the host-side path if your
@@ -56,9 +55,9 @@ ENTRYPOINT ["/opt/earlgrey/entrypoint.sh"]
 #   -v /home/nick/Documents/projects/Projects-School/Atallah-Lab/data/dfam_data:/opt/conda/envs/earlgrey/share/famdb-3.0.0/Libraries/famdb \
 #   -v /home/nick/Documents/projects/Projects-School/Atallah-Lab/data/genomes:/genomes \
 #   -v /home/nick/Documents/projects/Projects-School/Atallah-Lab/data/output:/output \
-#   earlgrey-insects:7.3.1 -g /genomes/raw_data/genome.fna -s dmel -o /output -t 8
+#   earlgrey-insects:latest -g /genomes/raw_data/genome.fna -s dmel -o /output -t 8
 #
-# On AWS Batch, same image/entrypoint, but -g/-o take s3:// URIs instead
-# (dfam_data still needs to reach the container — bake it in with COPY, or
-# mount an EFS volume at the famdb path above, before this runs on Batch):
+# Same image/entrypoint also runs against S3 (e.g. on the vps/ boxes) — just
+# pass s3:// URIs instead of local paths (dfam_data still needs to reach the
+# container; see DFAM_S3_URI in entrypoint.sh for the per-host caching path):
 #   -g s3://my-bucket/genomes/genome.fna.gz -s dmel -o s3://my-bucket/output/dmel
