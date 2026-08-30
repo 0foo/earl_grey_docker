@@ -8,7 +8,7 @@ Cheap 64GB-RAM dedicated servers (e.g. Hetzner's Server Auction) can run the 200
 
 Skip this step entirely if your data is already on local disk (e.g. via a mounted volume) — nothing below needs AWS credentials in that case.
 
-These boxes aren't AWS-hosted, so there's no instance role to lean on — they need an IAM **user** with an access key instead, scoped to just S3 read on the data bucket (the image is built locally on each box, so there's no ECR/container-registry permission needed at all):
+These boxes aren't AWS-hosted, so there's no instance role to lean on — they need an IAM **user** with an access key instead, scoped to just this bucket (the image is built locally on each box, so there's no ECR/container-registry permission needed at all). One shared user across every box; includes write/delete for cases like syncing local deletions back up (`aws s3 sync . s3://bucket --delete`) — a compromised box can therefore delete/overwrite bucket data too, not just read it, so keep this key off anything less trusted than the boxes themselves:
 
 ```
 aws iam create-user --user-name earlgrey-vps
@@ -16,13 +16,13 @@ aws iam put-user-policy --user-name earlgrey-vps --policy-name earlgrey-vps-acce
   "Version": "2012-10-17",
   "Statement": [
     {"Effect": "Allow", "Action": "s3:ListBucket", "Resource": "arn:aws:s3:::my-bioinfo-refdata-2026"},
-    {"Effect": "Allow", "Action": "s3:GetObject", "Resource": "arn:aws:s3:::my-bioinfo-refdata-2026/*"}
+    {"Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], "Resource": "arn:aws:s3:::my-bioinfo-refdata-2026/*"}
   ]
 }'
 aws iam create-access-key --user-name earlgrey-vps
 ```
 
-Save that access key/secret, then on each box:
+Save that access key/secret, then on each box (replacing any root-account credentials you were using before — root shouldn't have programmatic access keys at all; delete the root one from the AWS Console once every box is confirmed working on this new user):
 
 ```
 aws configure   # paste the earlgrey-vps access key/secret, set a default region
