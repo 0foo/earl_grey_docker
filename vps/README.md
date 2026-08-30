@@ -43,7 +43,7 @@ ssh root@<box-ip>
 tailscale up   # follow the printed login URL to approve this box in a browser
 ```
 
-`setup-box.sh` installs Docker and Tailscale if missing, creates a **96GiB swap file** (same OOM safety net as the AWS side — a single RepeatModeler worker has been observed spiking to ~60GB RSS by itself, and 2TB of disk makes this cheap insurance), and builds the image locally as `earlgrey-insects:latest` from `../earlgrey` relative to the script — no path or tag to pass, no AWS/ECR dependency for the image itself. `tailscale up` is a separate manual step since it's interactive (no auth key involved) — once joined, SSH into the box by its tailnet name/IP instead of its public one if you'd rather not expose SSH publicly.
+`setup-box.sh` installs Docker, Tailscale, and the AWS CLI if missing (the CLI is needed on the host itself, not just inside the container — `run-queue.sh` calls `aws s3 ls` directly to check whether a genome already completed), creates a **96GiB swap file** (same OOM safety net as the AWS side — a single RepeatModeler worker has been observed spiking to ~60GB RSS by itself, and 2TB of disk makes this cheap insurance), and builds the image locally as `earlgrey-insects:latest` from `../earlgrey` relative to the script — no path or tag to pass, no AWS/ECR dependency for the image itself. `tailscale up` is a separate manual step since it's interactive (no auth key involved) — once joined, SSH into the box by its tailnet name/IP instead of its public one if you'd rather not expose SSH publicly.
 
 ### 4. Run the queue
 

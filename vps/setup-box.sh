@@ -4,8 +4,8 @@ set -euo pipefail
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
 	echo "Usage: $(basename "$0") [swap-size-gib]" >&2
 	echo "  One-time setup for a dedicated/VPS box, run from within the" >&2
-	echo "  cloned repo (as vps/setup-box.sh): installs Docker and Tailscale" >&2
-	echo "  if missing, creates a swap file (default 96GiB — a single" >&2
+	echo "  cloned repo (as vps/setup-box.sh): installs Docker, Tailscale, and" >&2
+	echo "  the AWS CLI if missing, creates a swap file (default 96GiB — a single" >&2
 	echo "  RepeatModeler worker has been observed spiking to ~60GB RSS by" >&2
 	echo "  itself) if not already present, and builds the earlgrey image" >&2
 	echo "  from ../earlgrey relative to this script, tagged 'latest'." >&2
@@ -30,6 +30,17 @@ fi
 if ! command -v tailscale >/dev/null 2>&1; then
 	echo "Installing Tailscale..." >&2
 	curl -fsSL https://tailscale.com/install.sh | sh
+fi
+
+if ! command -v aws >/dev/null 2>&1; then
+	# Needed on the host itself, not just inside the container — run-queue.sh
+	# calls `aws s3 ls` directly to check whether a genome already completed.
+	echo "Installing AWS CLI..." >&2
+	apt-get update && apt-get install -y --no-install-recommends unzip
+	curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+	unzip -q -o /tmp/awscliv2.zip -d /tmp
+	/tmp/aws/install
+	rm -rf /tmp/awscliv2.zip /tmp/aws
 fi
 
 if swapon --show | grep -q '/swapfile'; then
