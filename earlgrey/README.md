@@ -30,7 +30,7 @@ docker compose build
 bin/run-earlgrey <genome-file> <dfam-dir> <output-dir> <species> [threads]
 ```
 
-All four/five arguments are real paths/values on your local filesystem — nothing needs to live at a fixed location, and there's no `.env` file. `run-earlgrey` mounts the genome's directory, the output directory, and the Dfam dir (at the fixed internal path earlGrey's conda env expects it) for just that run. A `.gz` genome is auto-decompressed into a temp file inside `<output-dir>`, cleaned up once the run finishes.
+All four/five arguments are real paths/values on your local filesystem — nothing needs to live at a fixed location, and there's no `.env` file. `run-earlgrey` mounts the genome's directory, the output directory, and the Dfam dir (at the fixed internal path earlGrey's conda env expects it) for just that run. A `.gz` genome is auto-decompressed once into `<output-dir>/<species>.genome.fna` — a persistent, deterministic path, not a temp file — and reused as-is on a later rerun rather than regenerated. This is deliberate: earlGrey resumes a stopped run by checking which output files already exist, and its later stages end up referencing the genome path internally, so a rerun must see the *same* path or resume breaks (as it did when this used a randomly-named temp file deleted on exit). Clean up by deleting the whole `<output-dir>/<species>_EarlGrey`-and-related output for that species, not this file alone.
 
 ```
 bin/run-earlgrey /data/bioinfo/data/genomes/2_unmasked_datasets/genome.fna.gz /data/bioinfo/data/dfam_data /data/bioinfo/data/output dmel 8

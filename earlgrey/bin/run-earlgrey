@@ -17,15 +17,20 @@ threads="${5:-4}"
 mkdir -p "$output"
 
 # earlGrey doesn't unzip local inputs itself (only s3:// inputs auto-unzip,
-# via the entrypoint) — decompress a .gz genome to a temp file first so it
-# can be passed like any other local path. Placed inside $output (already
-# mounted below) rather than /tmp, so this doesn't require its own mount.
-cleanup_genome=""
+# via the entrypoint) — decompress a .gz genome once to a deterministic,
+# persistent path (keyed by species) inside $output, not a randomly-named
+# temp file. earlGrey resumes a stopped run by checking which output files
+# already exist, and its later stages (e.g. TEstrainer) end up referencing
+# this genome path internally — a random name deleted on exit broke resume
+# entirely, since a rerun got a *different* random name pointing at nothing.
+# Reused as-is if it already exists; never deleted here (it's just another
+# artifact of $output, cleaned up along with everything else if you wipe
+# that species' output directory).
 if [[ "$genome" == *.gz ]]; then
-	decompressed="$(mktemp -p "$output" --suffix=.fna)"
-	cleanup_genome="$decompressed"
-	trap '[ -n "$cleanup_genome" ] && rm -f "$cleanup_genome"' EXIT
-	gunzip -c "$genome" > "$decompressed"
+	decompressed="$output/${species}.genome.fna"
+	if [ ! -e "$decompressed" ]; then
+		gunzip -c "$genome" >"$decompressed"
+	fi
 	genome="$decompressed"
 fi
 
