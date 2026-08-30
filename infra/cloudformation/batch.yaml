@@ -202,11 +202,19 @@ Resources:
               VolumeSize: !Ref RootVolumeSizeGiB
               VolumeType: gp3
               DeleteOnTermination: true
-        # AWS Batch inserts its own ECS-agent bootstrap commands after the
-        # shebang line of a shell-script UserData, so a plain script here
-        # is safe to combine with Batch's own instance setup.
+        # AWS Batch appends its own ECS-agent bootstrap as an additional MIME
+        # part onto this archive, but only if it's already valid MIME
+        # multi-part — a bare shell script is rejected outright (compute
+        # environment goes INVALID with "UserData is not MIME multipart
+        # format"), it is not auto-wrapped.
         UserData:
           Fn::Base64: !Sub |
+            Content-Type: multipart/mixed; boundary="==BOUNDARY=="
+            MIME-Version: 1.0
+
+            --==BOUNDARY==
+            Content-Type: text/x-shellscript; charset="us-ascii"
+
             #!/bin/bash
             fallocate -l ${SwapSizeMiB}M /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=${SwapSizeMiB}
             chmod 600 /swapfile
@@ -214,6 +222,7 @@ Resources:
             swapon /swapfile
             echo "vm.swappiness=10" >> /etc/sysctl.conf
             sysctl -p
+            --==BOUNDARY==--
 
   ComputeEnvironment:
     Type: AWS::Batch::ComputeEnvironment
