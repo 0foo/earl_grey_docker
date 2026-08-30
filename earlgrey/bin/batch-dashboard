@@ -3,45 +3,42 @@ set -euo pipefail
 
 if [ $# -lt 1 ]; then
 	echo "Usage: $(basename "$0") <job-queue>" >&2
-	echo "  One-shot status dashboard: job counts by status on the queue," >&2
-	echo "  and a per-array-job child breakdown for anything RUNNING or" >&2
-	echo "  FAILED — everything batch-status/list-jobs would otherwise take" >&2
-	echo "  several separate commands to see. For logs, see bin/batch-logs." >&2
+	echo "  One-shot status dashboard: real per-genome status counts on the" >&2
+	echo "  queue. Drills into each array job's children rather than trusting" >&2
+	echo "  the array job's own top-level status, which can lag well behind" >&2
+	echo "  (observed staying PENDING while children were actively RUNNING)." >&2
+	echo "  For logs, see bin/batch-logs." >&2
 	echo "Example: $(basename "$0") earlgrey-queue" >&2
 	exit 1
 fi
 
 queue="$1"
 
-echo "=== Job counts on queue: $queue ==="
-for status in SUBMITTED PENDING RUNNABLE STARTING RUNNING SUCCEEDED FAILED; do
-	count="$(aws batch list-jobs --job-queue "$queue" --job-status "$status" \
-		--query 'length(jobSummaryList)' --output text)"
-	if [ "$count" != "0" ]; then
-		echo "  $status: $count"
+job_ids="$(for status in SUBMITTED PENDING RUNNABLE STARTING RUNNING SUCCEEDED FAILED; do
+	aws batch list-jobs --job-queue "$queue" --job-status "$status" \
+		--query 'jobSummaryList[].jobId' --output text
+done)"
+
+if [ -z "$job_ids" ]; then
+	echo "No jobs found on queue $queue."
+	exit 0
+fi
+
+echo "=== Per submitted job on queue: $queue ==="
+all_statuses=""
+for job_id in $job_ids; do
+	children="$(aws batch list-jobs --array-job-id "$job_id" --query 'jobSummaryList[].status' --output text 2>/dev/null || true)"
+	if [ -n "$children" ]; then
+		echo "$job_id (array):"
+		tr '\t' '\n' <<<"$children" | sort | uniq -c | sort -rn
+		all_statuses="$all_statuses"$'\n'"$children"
+	else
+		top_status="$(aws batch describe-jobs --jobs "$job_id" --query 'jobs[0].status' --output text)"
+		echo "$job_id: $top_status"
+		all_statuses="$all_statuses"$'\n'"$top_status"
 	fi
 done
 
 echo
-echo "=== RUNNING / FAILED jobs (with array child breakdown) ==="
-for status in RUNNING FAILED; do
-	jobs="$(aws batch list-jobs --job-queue "$queue" --job-status "$status" \
-		--query 'jobSummaryList[].[jobId,jobName]' --output text)"
-	if [ -z "$jobs" ]; then
-		continue
-	fi
-	while IFS=$'\t' read -r job_id job_name; do
-		if [ -z "$job_id" ]; then
-			continue
-		fi
-		echo "--- $status: $job_name ($job_id) ---"
-		aws batch describe-jobs --jobs "$job_id" \
-			--query 'jobs[0].{status:status,statusReason:statusReason,arraySize:arrayProperties.size}' \
-			--output table
-		children="$(aws batch list-jobs --array-job-id "$job_id" --query 'jobSummaryList[].status' --output text 2>/dev/null || true)"
-		if [ -n "$children" ]; then
-			echo "Child status counts:"
-			tr '\t' '\n' <<<"$children" | sort | uniq -c | sort -rn
-		fi
-	done <<<"$jobs"
-done
+echo "=== Totals across all genomes ==="
+tr '\t' '\n' <<<"$all_statuses" | sed '/^$/d' | sort | uniq -c | sort -rn
