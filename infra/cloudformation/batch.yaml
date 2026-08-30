@@ -147,6 +147,13 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
+        # Lets you shell into a running instance via SSM Session Manager
+        # (aws ssm start-session) — e.g. to check free -h/ps aux --sort=-rss
+        # directly, since EC2 doesn't publish memory metrics by default.
+        # The ECS-optimized AMI ships with the SSM agent already running;
+        # this permission alone is enough for already-running instances to
+        # self-register within a few minutes, no relaunch needed.
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
       Policies:
         - PolicyName: earlgrey-instance-logs
           PolicyDocument:

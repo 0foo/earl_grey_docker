@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -lt 2 ]; then
+	echo "Usage: $(basename "$0") <manifest.tsv> <num-boxes> [output-prefix]" >&2
+	echo "  Splits a manifest into <num-boxes> roughly-equal chunk files," >&2
+	echo "  one per box, named <output-prefix>-01.tsv .. -0N.tsv (default" >&2
+	echo "  prefix: the input filename minus .tsv). No coordination needed" >&2
+	echo "  at runtime — each box just works through its own fixed slice." >&2
+	echo "Example: $(basename "$0") manifest.tsv 5" >&2
+	echo "  -> manifest-01.tsv .. manifest-05.tsv" >&2
+	exit 1
+fi
+
+manifest="$1"
+n="$2"
+prefix="${3:-${manifest%.tsv}}"
+
+total="$(wc -l <"$manifest" | tr -d ' ')"
+per_box=$(((total + n - 1) / n))
+
+split -d -l "$per_box" --numeric-suffixes=1 --additional-suffix=.tsv "$manifest" "${prefix}-"
+
+echo "Split $total genomes into $n files (~$per_box each):" >&2
+for f in "${prefix}-"*.tsv; do
+	echo "  $f: $(wc -l <"$f" | tr -d ' ') genomes" >&2
+done

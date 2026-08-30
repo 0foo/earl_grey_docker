@@ -1,5 +1,19 @@
 FROM condaforge/miniforge3:latest@sha256:609d8012d8ad3ea46c8e531ce2de9e727031960067b3a1e412c6e2954ef551c9
 
+# The base image ships with no timezone data at all (no tzdata package, no
+# /etc/localtime, no /usr/share/zoneinfo), which makes Perl's
+# DateTime::TimeZone module (used by RepeatModeler/RepeatMasker) print
+# "Your system is mis-configured" warnings on every run, since none of the
+# timezone file paths it checks exist. The actual timezone doesn't matter
+# for this batch workload — installing tzdata and pointing /etc/localtime
+# at a fixed zone just gives it something valid to find.
+ENV TZ=Etc/UTC
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tzdata && \
+    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
+    echo "$TZ" >/etc/timezone && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # Create the Conda environment with the required Python version
 RUN mamba create -n earlgrey -y -c conda-forge -c bioconda earlgrey=7.3.1 python=3.11 && \
     mamba clean -a -y
