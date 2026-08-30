@@ -311,8 +311,8 @@ Outputs:
     Value: !GetAtt EcrRepository.RepositoryUri
   JobQueueName:
     # Deliberately the literal name, not !Ref JobQueue (which returns the
-    # ARN) — the plain name is what submit-batch/batch-status/batch-
-    # dashboard expect, and it's fixed by JobQueueName below anyway.
+    # ARN) — the plain name is what submit-batch/batch-dashboard expect,
+    # and it's fixed by JobQueueName below anyway.
     Value: earlgrey-queue
   JobDefinitionName:
     # Same reasoning, and this also avoids pinning callers to whatever

@@ -1,28 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-queue=""
+target=""
 raw=0
 for arg in "$@"; do
 	case "$arg" in
 	--raw) raw=1 ;;
-	*) queue="$arg" ;;
+	*) target="$arg" ;;
 	esac
 done
 
-if [ -z "$queue" ]; then
-	echo "Usage: $(basename "$0") <job-queue> [--raw]" >&2
-	echo "  One-shot status dashboard: real per-genome status counts on the" >&2
-	echo "  queue, with runtime for each job/child. Drills into each array" >&2
-	echo "  job's children rather than trusting its own top-level status," >&2
-	echo "  which can lag well behind (observed staying PENDING while" >&2
-	echo "  children were actively RUNNING). For logs, see bin/batch-logs." >&2
+if [ -z "$target" ]; then
+	echo "Usage: $(basename "$0") <job-queue-or-job-id> [--raw]" >&2
+	echo "  One-shot status view. Pass a job queue name to see every job/child" >&2
+	echo "  on it, or a specific job ID to see just that one (with its child" >&2
+	echo "  breakdown if it's an array job). Either way: status, runtime, and" >&2
+	echo "  reason per job/child, drilling into array children rather than" >&2
+	echo "  trusting the array job's own top-level status (which can lag well" >&2
+	echo "  behind — observed staying PENDING while children were actively" >&2
+	echo "  RUNNING). Also lists the compute environment's running EC2" >&2
+	echo "  instances with an estimated cost so far. For logs, see" >&2
+	echo "  bin/batch-logs." >&2
 	echo "  --raw additionally dumps the full describe-jobs JSON (task ARN," >&2
-	echo "  attempts, container details, everything) for every job/child —" >&2
-	echo "  the same data you'd otherwise need separate manual describe-jobs" >&2
-	echo "  calls to see." >&2
+	echo "  attempts, container details, everything) for every job/child." >&2
 	echo "Example: $(basename "$0") earlgrey-queue" >&2
 	echo "Example: $(basename "$0") earlgrey-queue --raw" >&2
+	echo "Example: $(basename "$0") b02a68d4-3628-4732-94b0-353252bc2baa" >&2
 	exit 1
 fi
 
@@ -50,17 +53,23 @@ runtime_for() {
 	format_duration $((end_ms - started))
 }
 
-job_ids="$(for status in SUBMITTED PENDING RUNNABLE STARTING RUNNING SUCCEEDED FAILED; do
-	aws batch list-jobs --job-queue "$queue" --job-status "$status" \
-		--query 'jobSummaryList[].jobId' --output text
-done)"
-
-if [ -z "$job_ids" ]; then
-	echo "No jobs found on queue $queue."
-	exit 0
+# A bare job ID (UUID) means "show me just this one job"; anything else is
+# treated as a job queue name and we enumerate everything on it.
+if [[ "$target" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+	job_ids="$target"
+	echo "=== Job: $target ==="
+else
+	job_ids="$(for status in SUBMITTED PENDING RUNNABLE STARTING RUNNING SUCCEEDED FAILED; do
+		aws batch list-jobs --job-queue "$target" --job-status "$status" \
+			--query 'jobSummaryList[].jobId' --output text
+	done)"
+	if [ -z "$job_ids" ]; then
+		echo "No jobs found on queue $target."
+		exit 0
+	fi
+	echo "=== Per submitted job on queue: $target ==="
 fi
 
-echo "=== Per submitted job on queue: $queue ==="
 all_statuses=""
 for job_id in $job_ids; do
 	children="$(aws batch list-jobs --array-job-id "$job_id" --query 'jobSummaryList[].status' --output text 2>/dev/null || true)"
@@ -105,3 +114,44 @@ done
 echo
 echo "=== Totals across all genomes ==="
 tr '\t' '\n' <<<"$all_statuses" | sed '/^$/d' | sort | uniq -c | sort -rn
+
+echo
+echo "=== Running EC2 instances & estimated cost ==="
+echo "(On-Demand-equivalent estimate, not live-queried — actual Spot cost is typically 30-40% of this)"
+
+# us-east-1 On-Demand $/hr for the memory-optimized types in batch.yaml's
+# InstanceTypes default — a fixed approximation, not a live price lookup.
+declare -A hourly_rate=(
+	[r5.4xlarge]=1.008 [r5.8xlarge]=2.016
+	[r5a.4xlarge]=0.904 [r5a.8xlarge]=1.808
+	[r6i.4xlarge]=1.008 [r6i.8xlarge]=2.016
+	[r6a.4xlarge]=0.907 [r6a.8xlarge]=1.814
+)
+
+instances="$(aws ec2 describe-instances \
+	--filters "Name=tag:Name,Values=earlgrey-batch-worker" "Name=instance-state-name,Values=running" \
+	--query "Reservations[].Instances[].[InstanceId,InstanceType,LaunchTime]" --output text)"
+
+if [ -z "$instances" ]; then
+	echo "No running instances found (tag Name=earlgrey-batch-worker)."
+else
+	printf '%-20s %-13s %-7s %s\n' "Instance" "Type" "Hours" "Est. Cost"
+	total_cost="0"
+	now_s="$(date -u +%s)"
+	while IFS=$'\t' read -r iid itype launch; do
+		if [ -z "$iid" ]; then
+			continue
+		fi
+		launch_s="$(date -d "$launch" +%s)"
+		hours="$(awk -v a="$launch_s" -v b="$now_s" 'BEGIN{printf "%.2f", (b-a)/3600}')"
+		rate="${hourly_rate[$itype]:-}"
+		if [ -z "$rate" ]; then
+			printf '%-20s %-13s %-7s %s\n' "$iid" "$itype" "$hours" "(unknown type, no rate)"
+			continue
+		fi
+		cost="$(awk -v h="$hours" -v r="$rate" 'BEGIN{printf "%.2f", h*r}')"
+		total_cost="$(awk -v t="$total_cost" -v c="$cost" 'BEGIN{printf "%.2f", t+c}')"
+		printf '%-20s %-13s %-7s $%s\n' "$iid" "$itype" "$hours" "$cost"
+	done <<<"$instances"
+	echo "Total estimated On-Demand-equivalent cost so far: \$${total_cost} (actual Spot cost is typically 30-40% of this)"
+fi

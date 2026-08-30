@@ -119,7 +119,7 @@ earlgrey/bin/submit-batch manifest.tsv 1 5 \
 Check on it:
 
 ```
-earlgrey/bin/batch-status <job-id-printed-above>
+earlgrey/bin/batch-dashboard <job-id-printed-above>
 ```
 
 Once those 5 finish successfully and the output looks right in S3, move on.
@@ -144,12 +144,12 @@ Adjust batch size freely — smaller if you want tighter control, larger once yo
 
 ### Monitoring & troubleshooting
 
-* `earlgrey/bin/batch-dashboard <JobQueueName> [--raw]` — every job/child on the queue with its array index, status, runtime, and reason, plus overall totals. Drills into each array job's children rather than trusting the array job's own top-level status, which can lag well behind (observed staying `PENDING` while children were actively `RUNNING` and syncing Dfam). A completed job's runtime is its actual duration; a `RUNNING` job's is live elapsed time — a row that's `RUNNING` with a leftover `statusReason` and a runtime that just reset means it was interrupted (e.g. Spot) and auto-retried, not stuck. Prints the exact `batch-logs` command for each job, so you always have the job ID/index you need on hand. Start here.
+* `earlgrey/bin/batch-dashboard <job-queue-or-job-id> [--raw]` — one status view for both cases: pass a job queue name to see every job/child on it, or a specific job ID to see just that one. Either way: array index, status, runtime, and reason per job/child, plus overall totals. Drills into each array job's children rather than trusting the array job's own top-level status, which can lag well behind (observed staying `PENDING` while children were actively `RUNNING` and syncing Dfam). A completed job's runtime is its actual duration; a `RUNNING` job's is live elapsed time — a row that's `RUNNING` with a leftover `statusReason` and a runtime that just reset means it was interrupted (e.g. Spot) and auto-retried, not stuck. Also lists the compute environment's running EC2 instances with an estimated cost so far (On-Demand-equivalent, not live-queried — actual Spot cost is typically 30-40% of it). Prints the exact `batch-logs` command for each job, so you always have the job ID/index you need on hand. Start here.
   ```
   earlgrey/bin/batch-dashboard earlgrey-queue
+  earlgrey/bin/batch-dashboard b02a68d4-3628-4732-94b0-353252bc2baa   # just one job
   earlgrey/bin/batch-dashboard earlgrey-queue --raw   # + full describe-jobs JSON (task ARN, attempts, container) per job/child
   ```
-* `earlgrey/bin/batch-status <job-id>` — status + per-child breakdown for a single job (a narrower version of the dashboard's per-job section, useful once you already know the job ID you care about).
 * `earlgrey/bin/batch-logs <job-id> [array-index] [since]` — tails CloudWatch logs for one job. An array job's own container never has logs (only its children do), so pass its array-index to see one specific genome's log instead of the whole batch's.
   ```
   earlgrey/bin/batch-logs abcd1234-...          # plain (non-array) job
@@ -162,7 +162,7 @@ Adjust batch size freely — smaller if you want tighter control, larger once yo
   earlgrey/bin/batch-logs-all abcd1234-...
   earlgrey/bin/batch-logs-all abcd1234-... logs/
   ```
-* `earlgrey/bin/batch-describe-all <job-id>` — prints the full `describe-jobs` status+attempts JSON (task ARN, log stream, start/stop times, statusReason per attempt — the retry-history detail `batch-status`'s counts don't show) for every child of an array job, one after another.
+* `earlgrey/bin/batch-describe-all <job-id>` — prints the full `describe-jobs` status+attempts JSON (task ARN, log stream, start/stop times, statusReason per attempt — the retry-history detail `batch-dashboard`'s counts don't show) for every child of an array job, one after another. `batch-dashboard --raw` gives the same JSON inline alongside its status view; this is the standalone version.
   ```
   earlgrey/bin/batch-describe-all abcd1234-...
   ```

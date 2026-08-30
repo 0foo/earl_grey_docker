@@ -7,8 +7,9 @@ if [ $# -lt 1 ]; then
 	echo "  (task ARN, log stream, start/stop times, statusReason for every" >&2
 	echo "  attempt) for every child of an array job, one after another." >&2
 	echo "  Falls back to a single describe-jobs call if job-id isn't an" >&2
-	echo "  array job. For aggregate counts instead, see bin/batch-status" >&2
-	echo "  or bin/batch-dashboard." >&2
+	echo "  array job. For aggregate counts instead, see bin/batch-dashboard" >&2
+	echo "  (which also has a --raw flag for the same JSON, alongside its" >&2
+	echo "  status/runtime view)." >&2
 	echo "Example: $(basename "$0") abcd1234-..." >&2
 	exit 1
 fi
