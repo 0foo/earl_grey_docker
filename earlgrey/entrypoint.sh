@@ -129,6 +129,15 @@ fi
 
 if [ -n "$output_s3" ]; then
 	aws s3 sync --no-progress "$output_local" "$output_s3"
+	if [ "$status" -eq 0 ]; then
+		# aws s3 sync never deletes — an earlier failed/interrupted attempt's
+		# INCOMPLETE_RUN.txt would otherwise linger in S3 forever even after
+		# a later retry succeeds, wrongly flagging a good result as partial.
+		# Deliberately not `sync --delete` in general: a resubmit that
+		# crashes very early (empty local output dir) would otherwise wipe
+		# out a previously-successful result sitting under the same path.
+		aws s3 rm --quiet "${output_s3%/}/INCOMPLETE_RUN.txt" >/dev/null 2>&1 || true
+	fi
 fi
 
 exit "$status"
