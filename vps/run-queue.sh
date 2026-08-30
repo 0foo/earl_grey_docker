@@ -2,9 +2,12 @@
 set -euo pipefail
 
 print_usage() {
-	echo "Usage: $(basename "$0") <manifest-slice.tsv> [options]" >&2
+	echo "Usage: $(basename "$0") [manifest-slice.tsv] [options]" >&2
 	echo "  Settings can come from --flags, a config file, or both (flags win" >&2
 	echo "  over the config file for anything set in both):" >&2
+	echo "    manifest-slice.tsv  The manifest to process. Required as a" >&2
+	echo "                      positional arg or as MANIFEST in the config" >&2
+	echo "                      file — a positional arg always wins." >&2
 	echo "    --config <path>   Config file (default: ./run-queue.conf if it" >&2
 	echo "                      exists — see vps/run-queue.conf.example)." >&2
 	echo "    --image <image>   Docker image to run. Required (flag or config)." >&2
@@ -27,18 +30,21 @@ print_usage() {
 	echo "  headroom, since a single RepeatModeler worker has been observed" >&2
 	echo "  spiking to ~60GB RSS by itself; the setup script's swap file is" >&2
 	echo "  the backstop if that headroom isn't enough." >&2
-	echo "Example (config file supplies everything): $(basename "$0") manifest-01.tsv" >&2
+	echo "Example (config file supplies everything, MANIFEST included): $(basename "$0")" >&2
 	echo "Example (all flags): $(basename "$0") manifest-01.tsv --image earlgrey-insects:latest \\" >&2
 	echo "    --dfam /data/dfam_data --output /data/output --threads 4" >&2
 }
 
-if [ $# -lt 1 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
 	print_usage
 	exit 1
 fi
 
-manifest="$1"
-shift
+manifest=""
+if [ $# -gt 0 ] && [[ "$1" != -* ]]; then
+	manifest="$1"
+	shift
+fi
 
 config=""
 image=""
@@ -85,11 +91,15 @@ if [ -n "$config" ]; then
 		echo "Config file not found: $config" >&2
 		exit 1
 	fi
-	# Config sets IMAGE/DFAM/OUTPUT/THREADS (distinct names from this
-	# script's own image/dfam/output_prefix/threads) so a --flag already
-	# set from the command line is never clobbered by sourcing this file.
+	# Config sets MANIFEST/IMAGE/DFAM/OUTPUT/THREADS (distinct names from
+	# this script's own manifest/image/dfam/output_prefix/threads) so a
+	# --flag (or positional manifest) already set on the command line is
+	# never clobbered by sourcing this file.
 	# shellcheck disable=SC1090
 	source "$config"
+	if [ -z "$manifest" ]; then
+		manifest="${MANIFEST:-}"
+	fi
 	if [ -z "$image" ]; then
 		image="${IMAGE:-}"
 	fi
@@ -106,6 +116,10 @@ fi
 
 threads="${threads:-4}"
 
+if [ -z "$manifest" ]; then
+	echo "Missing manifest — supply it positionally or as MANIFEST in a config file (see --help)." >&2
+	exit 1
+fi
 if [ -z "$image" ] || [ -z "$dfam" ] || [ -z "$output_prefix" ]; then
 	echo "Missing --image/--dfam/--output — supply each via a flag or a config file (see --help)." >&2
 	exit 1

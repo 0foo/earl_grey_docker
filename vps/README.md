@@ -52,18 +52,19 @@ tailscale up   # follow the printed login URL to approve this box in a browser
 
 ### 4. Run the queue
 
-This runs for days/weeks unattended — use `tmux`/`screen`/`nohup` so it survives your SSH session ending. Only the manifest slice is a positional arg; everything else (`--image`/`--dfam`/`--output`/`--threads`) can come from **flags, a config file, or both** — flags win over the config file for anything set in both. `--dfam`/`--output` can each independently be `s3://` or local, same as the genome path in the manifest's 2nd column:
+This runs for days/weeks unattended — use `tmux`/`screen`/`nohup` so it survives your SSH session ending. The manifest slice can be a positional arg or `MANIFEST` in the config file (a positional arg wins if both are set); everything else (`--image`/`--dfam`/`--output`/`--threads`) can come from **flags, a config file, or both** — flags win over the config file for anything set in both. `--dfam`/`--output` can each independently be `s3://` or local, same as the genome path in the manifest's 2nd column:
 
 ```
-# Config file once per box (copy the example, then edit):
+# Config file once per box (copy the example, then edit — each box has its
+# own fixed manifest slice, so it's normal to bake MANIFEST in here too):
 cp vps/run-queue.conf.example run-queue.conf
-$EDITOR run-queue.conf   # set IMAGE/DFAM/OUTPUT/THREADS
+$EDITOR run-queue.conf   # set MANIFEST/IMAGE/DFAM/OUTPUT/THREADS
 
 # S3 needs AWS credentials configured first:
 aws configure   # paste the earlgrey-vps access key/secret, set a default region
 
 tmux new -s earlgrey
-~/earl_grey_docker/vps/run-queue.sh manifest-0N.tsv
+~/earl_grey_docker/vps/run-queue.sh
 # Ctrl-B D to detach; tmux attach -t earlgrey to check back in
 ```
 

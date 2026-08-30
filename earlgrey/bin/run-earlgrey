@@ -1,18 +1,103 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ $# -lt 4 ]; then
-	echo "Usage: $(basename "$0") <genome-file> <dfam-dir> <output-dir> <species> [threads]" >&2
-	echo "  All paths are on your local filesystem (host paths)." >&2
-	echo "Example: $(basename "$0") /data/bioinfo/data/genomes/2_unmasked_datasets/genome.fna /data/bioinfo/data/dfam_data /data/bioinfo/data/output dmel 8" >&2
+print_usage() {
+	echo "Usage: $(basename "$0") <genome-file> <species> [options]" >&2
+	echo "  All paths are on your local filesystem (host paths). dfam-dir and" >&2
+	echo "  output-dir tend to stay the same across runs, so they (and" >&2
+	echo "  threads) can come from --flags, a config file, or both — flags" >&2
+	echo "  win over the config file for anything set in both:" >&2
+	echo "    --config <path>   Config file (default: ./run-earlgrey.conf if" >&2
+	echo "                      it exists — see run-earlgrey.conf.example)." >&2
+	echo "    --dfam <dir>      Dfam famdb directory. Required (flag or config)." >&2
+	echo "    --output <dir>    Output directory. Required (flag or config)." >&2
+	echo "    --threads <n>     Threads to use. Default: 4." >&2
+	echo "Example (config file supplies dfam/output/threads):" >&2
+	echo "  $(basename "$0") genome.fna.gz dmel" >&2
+	echo "Example (all flags): $(basename "$0") genome.fna.gz dmel \\" >&2
+	echo "  --dfam /data/bioinfo/data/dfam_data --output /data/bioinfo/data/output --threads 8" >&2
+}
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+	print_usage
 	exit 1
 fi
 
-genome="$(realpath -m "$1")"
-dfam="$(realpath -m "$2")"
-output="$(realpath -m "$3")"
-species="$4"
-threads="${5:-4}"
+if [ $# -lt 2 ]; then
+	print_usage
+	exit 1
+fi
+
+genome_arg="$1"
+species="$2"
+shift 2
+
+config=""
+dfam=""
+output=""
+threads=""
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--config)
+		config="$2"
+		shift 2
+		;;
+	--dfam)
+		dfam="$2"
+		shift 2
+		;;
+	--output)
+		output="$2"
+		shift 2
+		;;
+	--threads)
+		threads="$2"
+		shift 2
+		;;
+	*)
+		echo "Unknown option: $1" >&2
+		print_usage
+		exit 1
+		;;
+	esac
+done
+
+if [ -z "$config" ] && [ -f "./run-earlgrey.conf" ]; then
+	config="./run-earlgrey.conf"
+fi
+
+if [ -n "$config" ]; then
+	if [ ! -f "$config" ]; then
+		echo "Config file not found: $config" >&2
+		exit 1
+	fi
+	# Config sets DFAM/OUTPUT/THREADS (distinct names from this script's
+	# own dfam/output/threads) so a --flag already set from the command
+	# line is never clobbered by sourcing this file.
+	# shellcheck disable=SC1090
+	source "$config"
+	if [ -z "$dfam" ]; then
+		dfam="${DFAM:-}"
+	fi
+	if [ -z "$output" ]; then
+		output="${OUTPUT:-}"
+	fi
+	if [ -z "$threads" ]; then
+		threads="${THREADS:-}"
+	fi
+fi
+
+threads="${threads:-4}"
+
+if [ -z "$dfam" ] || [ -z "$output" ]; then
+	echo "Missing --dfam/--output — supply each via a flag or a config file (see --help)." >&2
+	exit 1
+fi
+
+genome="$(realpath -m "$genome_arg")"
+dfam="$(realpath -m "$dfam")"
+output="$(realpath -m "$output")"
 
 mkdir -p "$output"
 

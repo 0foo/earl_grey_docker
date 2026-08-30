@@ -1,0 +1,12 @@
+# Copy to run-earlgrey.conf (in the directory you run run-earlgrey from,
+# or point at this file with --config <path>) to avoid retyping the same
+# --dfam/--output/--threads on every invocation — these tend to stay the
+# same across runs, unlike the genome file and species. Any of these can
+# still be overridden with a --flag when you run the script — flags win.
+
+DFAM=/data/bioinfo/data/dfam_data
+OUTPUT=/data/bioinfo/data/output
+
+# Sized for local runs; bump if you've confirmed the RAM headroom on your
+# machine — see ../../vps/README.md for the per-thread RAM rationale.
+THREADS=4

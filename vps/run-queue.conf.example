@@ -1,7 +1,13 @@
 # Copy to run-queue.conf (in the directory you run run-queue.sh from, or
 # point at this file with --config <path>) to avoid retyping the same
-# --image/--dfam/--output/--threads on every invocation. Any of these can
-# still be overridden with a --flag when you run the script — flags win.
+# manifest/--image/--dfam/--output/--threads on every invocation. Any of
+# these can still be overridden — MANIFEST by a positional arg, the rest
+# by a --flag — when you run the script; a positional arg/flag wins.
+
+# Each box has its own fixed manifest slice (see vps/README.md), so it's
+# usually fine to bake it into this box's config file — leave unset and
+# pass the manifest positionally instead if you'd rather not.
+MANIFEST=manifest-01.tsv
 
 IMAGE=earlgrey-insects:latest
 

@@ -3,7 +3,7 @@
 * `Dockerfile` — builds `earlgrey-insects:latest` (Earl Grey 7.3.1 + Python 3.11 + awscli).
 * `entrypoint.sh` — wraps `earlGrey` so `-g`/`-o` accept local paths or `s3://` URIs, for local runs and the [`../vps/`](../vps/README.md) work-queue.
 * `docker-compose.yml` — builds the image. No fixed data mount — mounts are added per invocation (see below).
-* `bin/run-earlgrey` — runs earlGrey from plain host paths (genome file, Dfam dir, output dir), no config needed.
+* `bin/run-earlgrey` — runs earlGrey from plain host paths (genome file, Dfam dir, output dir); dfam/output/threads can optionally come from a config file (`bin/run-earlgrey.conf.example`) instead of retyping them every run.
 * `bin/generate-manifest` — lists genome FASTAs under an S3 prefix into a `<species>\t<genome-s3-uri>` manifest, consumed by [`../vps/`](../vps/README.md) to distribute genomes across multiple machines.
 
 ## Prerequisites
@@ -21,16 +21,29 @@ docker compose build
 ## Run locally
 
 ```
-bin/run-earlgrey <genome-file> <dfam-dir> <output-dir> <species> [threads]
+bin/run-earlgrey <genome-file> <species> [options]
 ```
 
-All four/five arguments are real paths/values on your local filesystem — nothing needs to live at a fixed location, and there's no `.env` file. `run-earlgrey` mounts the genome's directory, the output directory, and the Dfam dir (at the fixed internal path earlGrey's conda env expects it) for just that run. A `.gz` genome is auto-decompressed once into `<output-dir>/<species>.genome.fna` — a persistent, deterministic path, not a temp file — and reused as-is on a later rerun rather than regenerated. This is deliberate: earlGrey resumes a stopped run by checking which output files already exist, and its later stages end up referencing the genome path internally, so a rerun must see the *same* path or resume breaks (as it did when this used a randomly-named temp file deleted on exit). Clean up by deleting the whole `<output-dir>/<species>_EarlGrey`-and-related output for that species, not this file alone.
+`genome-file` and `species` are positional since they change on every run; `--dfam`/`--output`/`--threads` tend to stay the same across runs, so they can come from **flags, a config file, or both** — flags win over the config file for anything set in both:
 
 ```
-bin/run-earlgrey /data/bioinfo/data/genomes/2_unmasked_datasets/genome.fna.gz /data/bioinfo/data/dfam_data /data/bioinfo/data/output dmel 8
+# Config file once (copy the example, then edit):
+cp bin/run-earlgrey.conf.example run-earlgrey.conf
+$EDITOR run-earlgrey.conf   # set DFAM/OUTPUT/THREADS
+
+bin/run-earlgrey /data/bioinfo/data/genomes/2_unmasked_datasets/genome.fna.gz dmel
 ```
 
-`threads` defaults to `4` if omitted.
+Or skip the config file and pass everything as flags (also how to override just one setting from an otherwise-used config file, e.g. `--threads 8`):
+
+```
+bin/run-earlgrey /data/bioinfo/data/genomes/2_unmasked_datasets/genome.fna.gz dmel \
+  --dfam /data/bioinfo/data/dfam_data --output /data/bioinfo/data/output --threads 8
+```
+
+`--config <path>` points at a specific config file instead of the default (`./run-earlgrey.conf` in the directory you run the script from, if it exists). `threads` defaults to `4` if not set by a flag or config.
+
+All paths are real paths on your local filesystem — nothing needs to live at a fixed location. `run-earlgrey` mounts the genome's directory, the output directory, and the Dfam dir (at the fixed internal path earlGrey's conda env expects it) for just that run. A `.gz` genome is auto-decompressed once into `<output-dir>/<species>.genome.fna` — a persistent, deterministic path, not a temp file — and reused as-is on a later rerun rather than regenerated. This is deliberate: earlGrey resumes a stopped run by checking which output files already exist, and its later stages end up referencing the genome path internally, so a rerun must see the *same* path or resume breaks (as it did when this used a randomly-named temp file deleted on exit). Clean up by deleting the whole `<output-dir>/<species>_EarlGrey`-and-related output for that species, not this file alone.
 
 Without the script, the equivalent manual command:
 
