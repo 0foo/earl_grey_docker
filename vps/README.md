@@ -6,7 +6,7 @@ Same image, same `entrypoint.sh`, unchanged — its `-g`/`-o` S3 handling and `D
 
 ### 1. Create an IAM user for these boxes
 
-These boxes aren't AWS-hosted, so there's no instance role to lean on — they need an IAM **user** with an access key instead, scoped to just S3 read/write on the data bucket (the image is built locally on each box from a git clone, so there's no ECR/container-registry permission needed at all):
+These boxes aren't AWS-hosted, so there's no instance role to lean on — they need an IAM **user** with an access key instead, scoped to just S3 read/write on the data bucket (the image is built locally on each box, so there's no ECR/container-registry permission needed at all):
 
 ```
 aws iam create-user --user-name earlgrey-vps
@@ -33,18 +33,17 @@ vps/partition-manifest manifest.tsv 5
 
 ### 3. Set up each box
 
-Provision the box (e.g. a Hetzner Server Auction Ryzen 5 3600 / 64GB RAM / 2x2TB dedicated server), then per box — only the setup script and this box's manifest slice need copying over; everything else comes from the clone:
+Provision the box, clone this repo onto it, then per box copy over just this box's manifest slice:
 
 ```
-scp manifest-0N.tsv vps/setup-box.sh root@<box-ip>:~
+scp manifest-0N.tsv root@<box-ip>:~
 ssh root@<box-ip>
 
-TAILSCALE_AUTHKEY=tskey-... ./setup-box.sh git@0foo:0foo/earl_grey_docker.git 7.3.1
+~/earl_grey_docker/vps/setup-box.sh ~/earl_grey_docker 7.3.1
+tailscale up   # follow the printed login URL to approve this box in a browser
 ```
 
-`setup-box.sh` installs Docker and git if missing, creates a **96GiB swap file** (same OOM safety net as the AWS side — a single RepeatModeler worker has been observed spiking to ~60GB RSS by itself, and 2TB of disk makes this cheap insurance), then clones (or pulls, if already cloned) the repo and builds the image locally — no AWS/ECR dependency for the image itself. If the repo URL is a private SSH remote, this box needs its own deploy key added to it, or your existing key copied over, before the clone will succeed.
-
-If `TAILSCALE_AUTHKEY` is set, it also installs Tailscale and joins your tailnet non-interactively — no browser-click prompt, so this works unattended across all 5 boxes. Generate a **reusable** key (so the same one works for every box) at [login.tailscale.com/admin/settings/keys](https://login.tailscale.com/admin/settings/keys); omit the env var to skip Tailscale entirely, or run `tailscale up` manually later. Once joined, SSH into a box by its tailnet name/IP instead of its public one if you'd rather not expose SSH publicly.
+`setup-box.sh` installs Docker and Tailscale if missing, creates a **96GiB swap file** (same OOM safety net as the AWS side — a single RepeatModeler worker has been observed spiking to ~60GB RSS by itself, and 2TB of disk makes this cheap insurance), and builds the image locally from the repo checkout you pass it — no AWS/ECR dependency for the image itself. `tailscale up` is a separate manual step since it's interactive (no auth key involved) — once joined, SSH into the box by its tailnet name/IP instead of its public one if you'd rather not expose SSH publicly.
 
 ### 4. Run the queue
 
