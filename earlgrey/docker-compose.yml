@@ -21,7 +21,3 @@ services:
 #     -v /data/bioinfo/data/output:/data/bioinfo/data/output \
 #     earlgrey -g /data/bioinfo/data/genomes/raw_data/<genome>.fna -s <species> \
 #       -o /data/bioinfo/data/output -t <threads>
-#
-# -g/-o also accept s3:// URIs (e.g. for the vps/ multi-machine setup) as
-# long as AWS credentials are available in the container (mount ~/.aws or
-# export AWS_*).

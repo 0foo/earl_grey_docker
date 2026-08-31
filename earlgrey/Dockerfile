@@ -18,11 +18,6 @@ RUN apt-get update && \
 RUN mamba create -n earlgrey -y -c conda-forge -c bioconda earlgrey=7.3.1 python=3.11 && \
     mamba clean -a -y
 
-# awscli in the base env (on PATH without activation) so the entrypoint can
-# move genome/Dfam/output to/from S3 (see vps/ for the multi-machine setup)
-RUN mamba install -n base -y -c conda-forge awscli && \
-    mamba clean -a -y
-
 # Generate the initial configure scripts
 # (This ensures the necessary directory structures are created by earlGrey.
 # It exits non-zero when run with no arguments by design, so the failure is
@@ -36,8 +31,7 @@ RUN conda run --no-capture-output -n earlgrey earlGrey || true
 # Set the default working directory for runtime operations
 WORKDIR /genomes
 
-# Wraps `conda run -n earlgrey earlGrey`, transparently handling s3:// URIs
-# for -g/-o alongside plain local paths (local testing) — see entrypoint.sh
+# Wraps `conda run -n earlgrey earlGrey` — see entrypoint.sh
 COPY entrypoint.sh /opt/earlgrey/entrypoint.sh
 RUN chmod +x /opt/earlgrey/entrypoint.sh
 ENTRYPOINT ["/opt/earlgrey/entrypoint.sh"]
@@ -56,8 +50,3 @@ ENTRYPOINT ["/opt/earlgrey/entrypoint.sh"]
 #   -v /home/nick/Documents/projects/Projects-School/Atallah-Lab/data/genomes:/genomes \
 #   -v /home/nick/Documents/projects/Projects-School/Atallah-Lab/data/output:/output \
 #   earlgrey-insects:latest -g /genomes/raw_data/genome.fna -s dmel -o /output -t 8
-#
-# Same image/entrypoint also runs against S3 (e.g. on the vps/ boxes) — just
-# pass s3:// URIs instead of local paths (dfam_data still needs to reach the
-# container; see DFAM_S3_URI in entrypoint.sh for the per-host caching path):
-#   -g s3://my-bucket/genomes/genome.fna.gz -s dmel -o s3://my-bucket/output/dmel

@@ -4,8 +4,8 @@ set -euo pipefail
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
 	echo "Usage: $(basename "$0") [swap-size-gib]" >&2
 	echo "  One-time setup for a dedicated/VPS box, run from within the" >&2
-	echo "  cloned repo (as vps/setup-box.sh): installs Docker, Tailscale, the" >&2
-	echo "  AWS CLI, and Ansible if missing, creates a swap file (default 96GiB — a single" >&2
+	echo "  cloned repo (as vps/setup-box.sh): installs Docker, Tailscale, and" >&2
+	echo "  Ansible if missing, creates a swap file (default 96GiB — a single" >&2
 	echo "  RepeatModeler worker has been observed spiking to ~60GB RSS by" >&2
 	echo "  itself) if not already present, and builds the earlgrey image" >&2
 	echo "  from ../earlgrey relative to this script, tagged 'latest'." >&2
@@ -32,18 +32,6 @@ if ! command -v tailscale >/dev/null 2>&1; then
 	curl -fsSL https://tailscale.com/install.sh | sh
 fi
 
-if ! command -v aws >/dev/null 2>&1; then
-	# Needed on the host itself for the one-time sync of genomes/Dfam data
-	# down to local disk (run-queue.sh/run-earlgrey work off local paths
-	# only — see vps/README.md and earlgrey/README.md).
-	echo "Installing AWS CLI..." >&2
-	apt-get update && apt-get install -y --no-install-recommends unzip
-	curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
-	unzip -q -o /tmp/awscliv2.zip -d /tmp
-	/tmp/aws/install
-	rm -rf /tmp/awscliv2.zip /tmp/aws
-fi
-
 if ! command -v ansible >/dev/null 2>&1; then
 	echo "Installing Ansible..." >&2
 	apt-get update && apt-get install -y ansible
@@ -62,15 +50,13 @@ else
 	echo "vm.swappiness=10" >>/etc/sysctl.conf
 fi
 
-mkdir -p /root/dfam-cache
-
 echo "Building earlgrey-insects:latest from $earlgrey_dir (docker compose build)..." >&2
 (cd "$earlgrey_dir" && docker compose build)
 
 echo >&2
 echo "Setup complete." >&2
 echo "  Run 'tailscale up' to join your tailnet (prints a login URL to approve in a browser)." >&2
-echo "  Sync genomes/Dfam data down to local disk if you haven't (aws configure, then aws s3 sync)." >&2
+echo "  Copy genomes/Dfam data onto this box's local disk if you haven't (scp/rsync)." >&2
 echo "  Configure $earlgrey_dir/bin/run-earlgrey.conf (dfam/output/threads) and" >&2
 echo "  $script_dir/run-queue.conf (manifest slice), then run the work queue with:" >&2
 echo "    $script_dir/run-queue.sh" >&2

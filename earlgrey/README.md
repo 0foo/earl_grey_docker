@@ -1,17 +1,17 @@
 ## What's here
 
-* `Dockerfile` — builds `earlgrey-insects:latest` (Earl Grey 7.3.1 + Python 3.11 + awscli).
-* `entrypoint.sh` — wraps `earlGrey` so `-g`/`-o` accept local paths or `s3://` URIs, for local runs and the [`../vps/`](../vps/README.md) work-queue.
+* `Dockerfile` — builds `earlgrey-insects:latest` (Earl Grey 7.3.1 + Python 3.11).
+* `entrypoint.sh` — wraps `earlGrey`, flagging any run that didn't finish cleanly (crash, OOM-kill, interruption) with an `INCOMPLETE_RUN.txt` marker in the output dir.
 * `docker-compose.yml` — builds the image. No fixed data mount — mounts are added per invocation (see below).
 * `bin/run-earlgrey` — runs earlGrey from plain host paths (genome file, Dfam dir, output dir), skipping a species whose output already completed; dfam/output/threads can optionally come from a config file (`bin/run-earlgrey.conf.example`) instead of retyping them every run. [`../vps/run-queue.sh`](../vps/README.md) calls this once per genome to run a manifest slice.
-* `bin/generate-manifest` — lists genome FASTAs under an S3 prefix into a `<species>\t<genome-s3-uri>` manifest, consumed by [`../vps/`](../vps/README.md) to distribute genomes across multiple machines.
+* `bin/generate-manifest` — lists genome FASTAs under a local directory into a `<species>\t<genome-path>` manifest, consumed by [`../vps/`](../vps/README.md) to distribute genomes across multiple machines.
 * `bin/monitor-resources.sh` — samples host CPU/memory/swap/load once a second; `run-earlgrey` starts/stops this automatically around its Docker run (see below), so it's not usually invoked directly.
 
 ## Prerequisites
 
 * Docker with Compose.
 * A local Dfam famdb directory, a genome FASTA, and an output directory (any paths — passed per run, not pre-configured).
-* The genome can be `.gz` or already uncompressed — `bin/run-earlgrey` auto-`gunzip`s a `.gz` input before handing it to `earlGrey` (which doesn't unzip local paths itself; only the `s3://` path in the entrypoint auto-`gunzip`s — see below). Calling `docker compose run` directly without the script, the input must already be uncompressed.
+* The genome can be `.gz` or already uncompressed — `bin/run-earlgrey` auto-`gunzip`s a `.gz` input before handing it to `earlGrey` (which doesn't unzip inputs itself). Calling `docker compose run` directly without the script, the input must already be uncompressed.
 
 ## Build
 
@@ -68,14 +68,4 @@ docker compose run --rm \
 docker run --rm -v /data/bioinfo/data/output:/data/bioinfo/data/output busybox rm -rf /data/bioinfo/data/output
 ```
 
-## Run against S3 (ad hoc — not used by `run-earlgrey` or the vps/ work-queue)
-
-`run-earlgrey` and [`../vps/run-queue.sh`](../vps/README.md) work off local paths only. `entrypoint.sh` itself still understands `s3://` for `-g`/`-o` if you invoke `docker compose run`/`docker run` directly:
-
-```
--g s3://my-bucket/genomes/<genome>.fna.gz -s <species> -o s3://my-bucket/output/<species>
-```
-
-`-g` is downloaded and auto-unzipped if `.gz`; `-o` runs locally then syncs to S3 on completion. `DFAM_S3_URI` (env var) triggers a one-time-per-host Dfam cache sync into the fixed famdb path instead of a bind mount. AWS credentials come from whatever's available in the environment — an IAM role if running on an AWS host, or an `~/.aws` mount / `AWS_*` env vars otherwise.
-
-For running many genomes across multiple machines (not all on one box), see [`../vps/README.md`](../vps/README.md), which syncs data to local disk per box and uses `bin/generate-manifest` to build the genome list.
+For running many genomes across multiple machines (not all on one box), see [`../vps/README.md`](../vps/README.md), which uses `bin/generate-manifest` to build the genome list from a local directory on each box.

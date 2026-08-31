@@ -13,11 +13,6 @@ RUN mamba create -n bioinfo -y -c conda-forge -c bioconda \
     unzip && \
     mamba clean -a -y
 
-# awscli in the base env (on PATH without activation), for parity with the
-# earlGrey image when pulling/pushing data to S3
-RUN mamba install -n base -y -c conda-forge awscli && \
-    mamba clean -a -y
-
 COPY entrypoint.sh /opt/tools/entrypoint.sh
 RUN chmod +x /opt/tools/entrypoint.sh
 ENTRYPOINT ["/opt/tools/entrypoint.sh"]
