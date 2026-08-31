@@ -25,7 +25,19 @@ status=0
 # \r-redraws down to just the last one, i.e. what a terminal would have shown.
 # Requires merging stderr into stdout (2>&1) so warnings interleaved with a
 # progress line by RepeatModeler survive the same transform in the same order.
-conda run --no-capture-output -n earlgrey earlGrey "${args[@]}" 2>&1 | sed -u 's/.*\r//' || status=$?
+#
+# RepeatModeler's family refinement also runs GNU parallel with a progress
+# bar, which tries to size itself via /dev/tty and — with no controlling
+# terminal to open, even under `docker compose run` with tty: true, since
+# this is piped rather than attached directly — spams
+# "sh: 1: cannot open /dev/tty: No such device or address" once per redraw.
+# It's harmless (parallel falls back to a default width) but floods the log,
+# so drop those lines. Wrapped with `|| true` so this filter's own exit
+# status can never be what `pipefail` blames a failure on — the real
+# earlGrey/sed exit codes are still what set $status below.
+conda run --no-capture-output -n earlgrey earlGrey "${args[@]}" 2>&1 |
+	sed -u 's/.*\r//' |
+	{ grep -v --line-buffered 'cannot open /dev/tty' || true; } || status=$?
 
 if [ "$status" -ne 0 ]; then
 	echo "=== earlGrey exited with status $status — did NOT complete successfully. Any output below is PARTIAL. ===" >&2
