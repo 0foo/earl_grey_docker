@@ -73,7 +73,14 @@ while [ $i -lt ${#args[@]} ]; do
 done
 
 status=0
-conda run --no-capture-output -n earlgrey earlGrey "${new_args[@]}" || status=$?
+# earlGrey's progress bars redraw with \r (carriage return), which a real
+# terminal overwrites in place — but redirected to a file (docker logs > file,
+# a log from run-queue.sh, anything non-TTY) every redraw instead piles up as
+# its own line, ballooning the log. `sed 's/.*\r//'` collapses each burst of
+# \r-redraws down to just the last one, i.e. what a terminal would have shown.
+# Requires merging stderr into stdout (2>&1) so warnings interleaved with a
+# progress line by RepeatModeler survive the same transform in the same order.
+conda run --no-capture-output -n earlgrey earlGrey "${new_args[@]}" 2>&1 | sed -u 's/.*\r//' || status=$?
 
 # A crash, an OOM-kill, or the process being interrupted all surface here as
 # a non-zero exit rather than the container disappearing before this point
