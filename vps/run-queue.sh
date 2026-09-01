@@ -98,18 +98,18 @@ echo "Starting queue from $manifest — logging to $log" | tee -a "$log"
 
 total="$(wc -l <"$manifest" | tr -d ' ')"
 n=0
-while IFS=$'\t' read -r species genome; do
+while IFS=$'\t' read -r species genome <&3; do
 	n=$((n + 1))
 	if [ -z "$species" ]; then
 		continue
 	fi
 
 	echo "[$n/$total] $species — starting $(date -u +%FT%TZ)" | tee -a "$log"
-	if "$run_earlgrey" "$genome" "$species" "${earlgrey_args[@]}" >>"$log" 2>&1; then
+	if "$run_earlgrey" "$genome" "$species" "${earlgrey_args[@]}" </dev/null >>"$log" 2>&1; then
 		echo "[$n/$total] $species — done $(date -u +%FT%TZ)" | tee -a "$log"
 	else
 		echo "[$n/$total] $species — FAILED $(date -u +%FT%TZ), see $log for details" | tee -a "$log"
 	fi
-done <"$manifest"
+done 3<"$manifest"
 
 echo "Queue finished: $total genomes processed. See $log for the full run history." | tee -a "$log"
