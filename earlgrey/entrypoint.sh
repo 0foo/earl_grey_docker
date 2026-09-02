@@ -31,13 +31,34 @@ status=0
 # terminal to open, even under `docker compose run` with tty: true, since
 # this is piped rather than attached directly — spams
 # "sh: 1: cannot open /dev/tty: No such device or address" once per redraw.
-# It's harmless (parallel falls back to a default width) but floods the log,
-# so drop those lines. Wrapped with `|| true` so this filter's own exit
-# status can never be what `pipefail` blames a failure on — the real
-# earlGrey/sed exit codes are still what set $status below.
+# It's harmless (parallel falls back to a default width), so drop those
+# lines outright.
+#
+# Even with that gone, parallel's bar (e.g. "9% 68:613=39m37s
+# rnd-2_family-385.fasta") still redraws far more often than is useful in a
+# log meant to be read later rather than watched live — it updates on a
+# timer, not just once per finished family. Throttle lines matching that
+# specific format to at most one per PROGRESS_INTERVAL seconds; every other
+# line (real earlGrey/RepeatModeler log output) passes through untouched.
+#
+# Both filters live in one awk stage (rather than a separate grep) so a
+# single `|| true` on this, the pipeline's last stage, is enough to keep
+# pipefail from ever blaming a filtering hiccup instead of the real
+# earlGrey/sed exit code for $status below.
+PROGRESS_INTERVAL="${PROGRESS_INTERVAL:-60}"
 conda run --no-capture-output -n earlgrey earlGrey "${args[@]}" 2>&1 |
 	sed -u 's/.*\r//' |
-	{ grep -v --line-buffered 'cannot open /dev/tty' || true; } || status=$?
+	{
+		awk -v interval="$PROGRESS_INTERVAL" '
+			/cannot open \/dev\/tty/ { next }
+			/^[[:space:]]*[0-9]+% +[0-9]+:[0-9]+=/ {
+				now = systime()
+				if (now - last < interval) next
+				last = now
+			}
+			{ print; fflush() }
+		' || true
+	} || status=$?
 
 if [ "$status" -ne 0 ]; then
 	echo "=== earlGrey exited with status $status — did NOT complete successfully. Any output below is PARTIAL. ===" >&2

@@ -8,8 +8,10 @@ FROM condaforge/miniforge3:latest@sha256:609d8012d8ad3ea46c8e531ce2de9e727031960
 # for this batch workload — installing tzdata and pointing /etc/localtime
 # at a fixed zone just gives it something valid to find.
 ENV TZ=Etc/UTC
+# bc is required by earlGrey's own scripts (line-count/percentage math) but
+# isn't present in the base image, so it's installed alongside tzdata here.
 RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tzdata && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tzdata bc && \
     ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
     echo "$TZ" >/etc/timezone && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
